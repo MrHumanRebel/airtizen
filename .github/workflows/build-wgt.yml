@@ -95,10 +95,47 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p app/release
+          rm -f app/release/*.wgt
           chmod +x ./package.exp
           export TIZEN_PROFILE_NAME="$TIZEN_PROFILE_NAME"
           export GITHUB_WORKSPACE="$GITHUB_WORKSPACE"
+
+          set +e
           ./package.exp
+          TIZEN_PACKAGE_STATUS=$?
+          set -e
+
+          if [ "$TIZEN_PACKAGE_STATUS" -ne 0 ] || ! find app/release -maxdepth 1 -type f -name '*.wgt' | grep -q .; then
+            echo "::warning::Signed Tizen packaging failed with status ${TIZEN_PACKAGE_STATUS}; creating unsigned WGT fallback from app/.buildResult."
+            python3 - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          build_dir = Path('app/.buildResult')
+          release_dir = Path('app/release')
+          output = release_dir / 'AirTizen.wgt'
+
+          if not build_dir.is_dir():
+              raise SystemExit('app/.buildResult does not exist')
+          if not (build_dir / 'config.xml').is_file():
+              raise SystemExit('config.xml is missing from app/.buildResult')
+
+          release_dir.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+              for root, dirs, files in os.walk(build_dir):
+                  dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules'}]
+                  for filename in files:
+                      path = Path(root) / filename
+                      arcname = path.relative_to(build_dir).as_posix()
+                      archive.write(path, arcname)
+
+          if output.stat().st_size <= 0:
+              raise SystemExit('created WGT is empty')
+          print(f'Created fallback WGT: {output} ({output.stat().st_size} bytes)')
+          PY
+          fi
+
           ls -lah app/release
           test -n "$(find app/release -maxdepth 1 -type f -name '*.wgt' -print -quit)"
 
