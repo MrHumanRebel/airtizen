@@ -37,24 +37,20 @@ file mkdir $release_dir
 spawn $tizen_bin package -t wgt -o $release_dir -s $profile -- $build_dir
 
 expect {
-  -re {(?i)author.*password.*:} {
-    send -- "$password\r"
-    exp_continue
-  }
-  -re {(?i)distributor.*password.*:} {
-    send -- "$password\r"
-    exp_continue
-  }
-  -re {(?i)certificate.*password.*:} {
-    send -- "$password\r"
-    exp_continue
-  }
-  -re {(?i)password.*:} {
-    send -- "$password\r"
-    exp_continue
-  }
-  -re {Yes: \(Y\), No: \(N\) \?} {
+  "Yes: (Y), No: (N) ?" {
     send -- "N\r"
+    exp_continue
+  }
+  "Author password:" {
+    send -- "$password\r"
+    exp_continue
+  }
+  "Distributor password:" {
+    send -- "$password\r"
+    exp_continue
+  }
+  "Certificate password:" {
+    send -- "$password\r"
     exp_continue
   }
   timeout {
