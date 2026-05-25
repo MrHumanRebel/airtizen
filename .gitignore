@@ -1,0 +1,7 @@
+.buildResult/
+app/.buildResult/
+app/release/
+tizen-studio/
+tizen-studio-data/
+*.wgt
+.DS_Store

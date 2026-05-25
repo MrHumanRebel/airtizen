@@ -1,0 +1,72 @@
+name: Build AirTizen WGT
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+
+permissions:
+  contents: write
+
+env:
+  TIZEN_STUDIO_VER: 4.5.1
+  TIZEN_PROFILE_NAME: AirTizen
+  TIZEN_CERT_PASSWORD: 1234
+
+jobs:
+  build-wgt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y expect curl unzip
+
+      - name: Download Tizen Studio Web CLI
+        run: |
+          curl -L -o tizen-installer "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
+          chmod +x tizen-installer
+
+      - name: Install Tizen Studio
+        run: |
+          ./tizen-installer --accept-license "$GITHUB_WORKSPACE/tizen-studio"
+          echo "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/tizen-studio/tools" >> "$GITHUB_PATH"
+
+      - name: Prepare certificate
+        run: |
+          if [ -n "${{ secrets.TIZEN_CERT_P12_BASE64 }}" ]; then
+            echo "${{ secrets.TIZEN_CERT_P12_BASE64 }}" | base64 -d > "$GITHUB_WORKSPACE/airtizen.p12"
+            "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" security-profiles add -n "$TIZEN_PROFILE_NAME" -a "$GITHUB_WORKSPACE/airtizen.p12" -p "${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}"
+          else
+            "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" certificate -a AirTizen -p "$TIZEN_CERT_PASSWORD" -c HU -s Gyor -ct Gyor -o HumanRebel -n AirTizen -e airtizen@example.local -f airtizen
+            "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" security-profiles add -n "$TIZEN_PROFILE_NAME" -a "$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.p12" -p "$TIZEN_CERT_PASSWORD"
+          fi
+          "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" cli-config "profiles.path=$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml"
+          chmod 755 "$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml"
+
+      - name: Build web package
+        run: |
+          cd app
+          "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" build-web -e ".*" -e "node_modules/*" -e "package*.json"
+
+      - name: Package WGT
+        run: |
+          sed -i "s|$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.pwd|$TIZEN_CERT_PASSWORD|g" "$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml" || true
+          mkdir -p app/release
+          expect ./package.exp
+          ls -la app/release
+
+      - name: Upload WGT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirTizen-wgt
+          path: app/release/*.wgt
+
+      - name: Release WGT on tags
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/release/*.wgt
