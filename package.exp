@@ -1,24 +1,26 @@
 #!/usr/bin/expect -f
 set timeout 30
-set password [exec echo $env(TIZEN_CERT_PASSWORD)]
-set workspace $env(GITHUB_WORKSPACE)
+
+# Get password from environment
+if {[catch {set password $env(TIZEN_CERT_PASSWORD)} err]} {
+  puts "Error: TIZEN_CERT_PASSWORD not set: $err"
+  exit 1
+}
 
 spawn ./tizen-studio/tools/ide/bin/tizen package -t wgt -o ./app/release -s AirTizen -- ./app/.buildResult
 
 expect {
   "Author password:" {
-    send -- "$password\n"
+    send "$password\n"
     exp_continue
   }
   "Yes: (Y), No: (N) ?" {
-    send -- "N\n"
+    send "N\n"
     exp_continue
   }
-  "error" {
+  timeout {
+    puts "Timeout waiting for tizen package to complete"
     exit 1
   }
   eof
 }
-
-catch wait result
-exit [lindex $result 3]
