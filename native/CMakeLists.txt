@@ -19,6 +19,7 @@ file(GLOB AIRPLAY_LIB_SRC
 
 set(AIRTIZEN_CORE_SRC
   src/airtizen_core.c
+  src/airtizen_mdns.c
   ports/tizen_audio_output.c
   ports/tizen_socket_backend.c
 )
