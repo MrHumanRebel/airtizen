@@ -20,6 +20,7 @@ file(GLOB AIRPLAY_LIB_SRC
 set(AIRTIZEN_CORE_SRC
   src/airtizen_core.c
   src/airtizen_mdns.c
+  src/airtizen_control_http.c
   ports/tizen_audio_output.c
   ports/tizen_socket_backend.c
 )
@@ -37,3 +38,9 @@ add_executable(airtizen_runtime
 )
 
 target_link_libraries(airtizen_runtime PRIVATE airtizen_core Threads::Threads)
+
+add_executable(airtizen_tizen_service
+  src/airtizen_tizen_service.c
+)
+
+target_link_libraries(airtizen_tizen_service PRIVATE airtizen_core Threads::Threads)

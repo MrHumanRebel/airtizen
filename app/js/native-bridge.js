@@ -87,7 +87,7 @@
           if (remoteLines[i]) log('[runtime] ' + remoteLines[i]);
         }
       }
-      return { ok:true, status:this.lastStatus };
+      return { ok:true, status:this.lastStatus, service:res.service || "running", protocols:res.protocols || {} };
     }
 
     this.runtimeReachable = false;
