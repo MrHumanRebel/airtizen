@@ -2,9 +2,7 @@
 set timeout -1
 spawn ./tizen-studio/tools/ide/bin/tizen package -t wgt -o ./app/release -s AirTizen -- ./app/.buildResult
 expect {
-  "Author password:" { send -- "1234
-"; exp_continue }
-  "Yes: (Y), No: (N) ?" { send -- "Y
-"; exp_continue }
+  "Author password:" { send -- "1234\n"; exp_continue }
+  "Save author password" { send -- "N\n"; exp_continue }
   eof
 }
