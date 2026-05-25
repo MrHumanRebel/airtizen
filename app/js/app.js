@@ -16,8 +16,8 @@
       setText('st-pair', s.pair); cls('st-pair', s.pair==='verified'?'ok':'wait');
       setText('st-audio', s.audio); cls('st-audio', s.audio==='playing'?'ok':'wait');
       setText('codec', s.codec); setText('rate', s.rate); setText('buffer', s.buffer);
-      setText('hero-status', s.connected ? 'Connected: ' + s.device : 'AirPlay ready');
-      setText('hero-detail', s.detail || 'Waiting for iPhone');
+      setText('hero-status', s.connected ? 'Connected: ' + s.device : ('Service: ' + (res.service || 'offline')));
+      setText('hero-detail', s.detail || 'Waiting for runtime status');
       $('small-log').innerHTML = (res.log || '').split('\n').slice(-3).join('\n');
       if(overlayOpen) $('full-log').innerHTML = res.log || '';
     });
