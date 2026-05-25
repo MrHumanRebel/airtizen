@@ -55,10 +55,8 @@ jobs:
       - name: Package WGT
         run: |
           mkdir -p app/release
-          # Pre-create the .pwd file to avoid the save prompt
-          echo "$TIZEN_CERT_PASSWORD" > "$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.pwd"
-          # Update profiles.xml to reference the .pwd file
-          sed -i "s|<password>.*</password>|<password>$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.pwd</password>|g" "$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml" || true
+          export TIZEN_CERT_PASSWORD="$TIZEN_CERT_PASSWORD"
+          export GITHUB_WORKSPACE="$GITHUB_WORKSPACE"
           expect ./package.exp
           ls -la app/release
 

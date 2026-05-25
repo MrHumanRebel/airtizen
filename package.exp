@@ -1,8 +1,24 @@
 #!/usr/bin/expect -f
-set timeout -1
+set timeout 30
+set password [exec echo $env(TIZEN_CERT_PASSWORD)]
+set workspace $env(GITHUB_WORKSPACE)
+
 spawn ./tizen-studio/tools/ide/bin/tizen package -t wgt -o ./app/release -s AirTizen -- ./app/.buildResult
+
 expect {
-  "Author password:" { send -- "1234\n"; exp_continue }
-  "Save author password" { send -- "N\n"; exp_continue }
+  "Author password:" {
+    send -- "$password\n"
+    exp_continue
+  }
+  "Yes: (Y), No: (N) ?" {
+    send -- "N\n"
+    exp_continue
+  }
+  "error" {
+    exit 1
+  }
   eof
 }
+
+catch wait result
+exit [lindex $result 3]
