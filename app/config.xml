@@ -4,11 +4,12 @@
         id="com.humanrebel.airtizen"
         version="2.2.2"
         viewmodes="maximized">
-    <tizen:application id="AirtizenReceiver.AirTizen" package="AirtizenReceiver" required_version="3.0"/>
-    <tizen:profile name="tv-samsung"/>
+    <tizen:application id="AirTizen01.AirTizen" package="AirTizen01" required_version="3.0"/>
+    <tizen:profile name="tv"/>
     <name>AirTizen</name>
     <icon src="icon.png"/>
     <content src="index.html"/>
+    <access origin="*" subdomains="true"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/network.get"/>
