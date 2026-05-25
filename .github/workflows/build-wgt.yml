@@ -48,6 +48,7 @@ jobs:
           set -euo pipefail
           TIZEN_BIN="$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen"
           PROFILE_XML="$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml"
+          DISTRIBUTOR_PASSWORD="tizenpkcs12passfordsigner"
 
           mkdir -p "$(dirname "$PROFILE_XML")" "$GITHUB_WORKSPACE/app/release"
 
@@ -76,7 +77,17 @@ jobs:
 
           "$TIZEN_BIN" cli-config "profiles.path=$PROFILE_XML"
           test -s "$PROFILE_XML"
-          chmod 600 "$PROFILE_XML"
+
+          # Jellyfin's working Tizen CI pipeline patches profiles.xml because
+          # headless Tizen Studio writes .pwd path references that package/sign
+          # can fail to re-read inside GitHub Actions.
+          sed -i "s|${GITHUB_WORKSPACE}/airtizen.pwd|${CERT_PASSWORD}|g" "$PROFILE_XML"
+          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/airtizen.pwd|${CERT_PASSWORD}|g" "$PROFILE_XML"
+          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.pwd|${DISTRIBUTOR_PASSWORD}|g" "$PROFILE_XML"
+          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio-data/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.pwd|${DISTRIBUTOR_PASSWORD}|g" "$PROFILE_XML"
+          sed -i "s|password=\"\"|password=\"${DISTRIBUTOR_PASSWORD}\"|g" "$PROFILE_XML"
+
+          chmod 755 "$PROFILE_XML"
           "$TIZEN_BIN" security-profiles list
 
       - name: Build web package
