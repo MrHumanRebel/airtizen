@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(AirTizenCore C CXX)
+set(CMAKE_C_STANDARD 99)
+include_directories(include ../third_party/AirPlayServerLib/include ../third_party/AirPlayServerLib/lib)
+file(GLOB AIRTIZEN_SRC src/*.c ports/*.c)
+file(GLOB AIRPLAY_LIB_SRC ../third_party/AirPlayServerLib/lib/*.c ../third_party/AirPlayServerLib/lib/crypto/*.c ../third_party/AirPlayServerLib/lib/curve25519/*.c ../third_party/AirPlayServerLib/lib/ed25519/*.c)
+add_library(airtizen_core STATIC ${AIRTIZEN_SRC} ${AIRPLAY_LIB_SRC})
