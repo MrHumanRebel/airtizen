@@ -42,11 +42,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/tizen-studio/tools" >> "$GITHUB_PATH"
 
       - name: Prepare certificate profile
+        env:
+          CERT_PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}
         run: |
           set -euo pipefail
           TIZEN_BIN="$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen"
           PROFILE_XML="$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml"
-          CERT_PASSWORD="${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}"
 
           mkdir -p "$(dirname "$PROFILE_XML")" "$GITHUB_WORKSPACE/app/release"
 
@@ -59,7 +60,7 @@ jobs:
           else
             "$TIZEN_BIN" certificate \
               -a AirTizen \
-              -p "$TIZEN_CERT_PASSWORD" \
+              -p "$CERT_PASSWORD" \
               -c HU \
               -s Gyor \
               -ct Gyor \
@@ -70,11 +71,10 @@ jobs:
             "$TIZEN_BIN" security-profiles add \
               -n "$TIZEN_PROFILE_NAME" \
               -a "$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.p12" \
-              -p "$TIZEN_CERT_PASSWORD"
+              -p "$CERT_PASSWORD"
           fi
 
           "$TIZEN_BIN" cli-config "profiles.path=$PROFILE_XML"
-          "$TIZEN_BIN" cli-config -g "default.profiles.path=$PROFILE_XML"
           test -s "$PROFILE_XML"
           chmod 600 "$PROFILE_XML"
           "$TIZEN_BIN" security-profiles list
@@ -90,11 +90,12 @@ jobs:
           test -d .buildResult
 
       - name: Package WGT
+        env:
+          TIZEN_CERT_PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p app/release
           chmod +x ./package.exp
-          export TIZEN_CERT_PASSWORD="${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}"
           export TIZEN_PROFILE_NAME="$TIZEN_PROFILE_NAME"
           export GITHUB_WORKSPACE="$GITHUB_WORKSPACE"
           ./package.exp
