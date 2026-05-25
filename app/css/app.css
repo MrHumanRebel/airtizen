@@ -1,0 +1,59 @@
+html, body { margin:0; padding:0; width:1920px; height:1080px; overflow:hidden; background:#020610; color:#eaf9ff; font-family: Arial, Helvetica, sans-serif; }
+#bg-a { position:absolute; left:-220px; top:-180px; width:820px; height:820px; background:#073e68; border-radius:410px; opacity:.62; }
+#bg-b { position:absolute; right:-180px; bottom:-240px; width:980px; height:980px; background:#052450; border-radius:490px; opacity:.72; }
+#shell { position:absolute; left:54px; top:46px; width:1812px; height:988px; background:rgba(7,16,33,.88); border:2px solid rgba(92,232,255,.28); border-radius:38px; box-shadow:0 0 80px rgba(0,210,255,.22); }
+#side { position:absolute; left:0; top:0; width:330px; height:988px; background:rgba(2,10,22,.72); border-right:1px solid rgba(117,235,255,.18); border-radius:38px 0 0 38px; }
+.brand-mark { position:absolute; left:34px; top:30px; width:94px; height:94px; border-radius:26px; background:rgba(255,255,255,.04); box-shadow:0 0 32px rgba(0,215,255,.35); overflow:hidden; }
+.brand-title { position:absolute; left:138px; top:42px; font-size:35px; font-weight:bold; }
+.brand-sub { position:absolute; left:138px; top:86px; font-size:16px; color:#86a8bd; }
+.nav-item { position:relative; left:34px; top:165px; width:248px; margin-bottom:20px; padding:24px 22px; border-radius:24px; color:#aac8d8; font-size:24px; background:rgba(255,255,255,.035); border:2px solid transparent; }
+.nav-item.active { color:#ffffff; background:rgba(0,205,255,.18); border-color:rgba(0,220,255,.55); }
+[data-focus="1"].focus { border-color:#5ff2ff !important; box-shadow:0 0 0 6px rgba(0,220,255,.18), 0 0 32px rgba(0,220,255,.45); color:#fff; }
+#hint-box { position:absolute; left:36px; bottom:34px; width:240px; padding:20px; border-radius:22px; background:rgba(255,255,255,.05); color:#7fa1b8; font-size:18px; line-height:1.45; }
+#main { position:absolute; left:330px; top:0; width:1482px; height:988px; }
+#topbar { position:absolute; left:48px; top:42px; width:1380px; height:110px; }
+#title { font-size:50px; font-weight:bold; letter-spacing:-1px; }
+#subtitle { margin-top:12px; font-size:23px; color:#8fb3c7; }
+#clock { position:absolute; right:0; top:8px; color:#9ed6e8; font-size:25px; }
+#hero { position:absolute; left:48px; top:170px; width:1376px; height:240px; border-radius:38px; background:rgba(0,170,255,.13); border:2px solid rgba(95,242,255,.22); }
+.orb { position:absolute; left:46px; top:42px; width:156px; height:156px; border-radius:78px; border:3px solid rgba(95,242,255,.55); box-shadow:0 0 44px rgba(0,220,255,.35); }
+.orb-dot { position:absolute; left:57px; top:57px; width:42px; height:42px; border-radius:21px; background:#00e4ff; box-shadow:0 0 40px rgba(0,228,255,.9); }
+.hero-copy { position:absolute; left:240px; top:46px; }
+.label { color:#67dff5; text-transform:uppercase; letter-spacing:2px; font-size:16px; font-weight:bold; }
+#hero-status { margin-top:14px; font-size:46px; font-weight:bold; }
+#hero-detail { margin-top:14px; color:#b8d0dc; font-size:22px; }
+#hero-pill { position:absolute; right:44px; top:82px; width:170px; height:76px; line-height:76px; text-align:center; border-radius:26px; background:#00d7ff; color:#00111c; font-size:25px; font-weight:bold; }
+#cards { position:absolute; left:48px; top:442px; width:1376px; height:156px; }
+.card { float:left; width:300px; height:118px; margin-right:26px; padding:22px; border-radius:30px; background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.08); }
+.card-label { color:#7ea6bd; font-size:17px; text-transform:uppercase; letter-spacing:1px; }
+.card-value { margin-top:20px; font-size:33px; font-weight:bold; }
+.ok { color:#41f7c7; } .bad { color:#ff6666; } .wait { color:#ffd56a; }
+#now { position:absolute; left:48px; top:628px; width:1376px; height:160px; border-radius:32px; background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.08); }
+#art { position:absolute; left:28px; top:24px; width:112px; height:112px; border-radius:28px; background:rgba(255,255,255,.03); overflow:hidden; box-shadow:0 0 24px rgba(0,215,255,.18); }
+#now-text { position:absolute; left:168px; top:33px; width:850px; }
+#track-title { margin-top:12px; font-size:34px; font-weight:bold; }
+#track-subtitle { margin-top:10px; color:#91b2c3; font-size:21px; }
+#codec-panel { position:absolute; right:34px; top:31px; width:260px; color:#9ec2d6; font-size:20px; line-height:1.6; }
+#log-panel { position:absolute; left:48px; top:820px; width:1376px; height:122px; border-radius:28px; background:rgba(0,0,0,.26); border:1px solid rgba(255,255,255,.08); }
+.panel-title { position:absolute; left:24px; top:16px; color:#67dff5; font-size:16px; text-transform:uppercase; letter-spacing:1px; font-weight:bold; }
+#small-log { position:absolute; left:24px; top:42px; width:1320px; height:60px; margin:0; color:#b7d3df; font-size:18px; white-space:pre-wrap; overflow:hidden; }
+#log-overlay { position:absolute; left:48px; top:48px; width:1824px; height:984px; background:rgba(2,6,15,.96); border:3px solid #00d7ff; border-radius:34px; z-index:50; }
+.hidden { display:none; }
+#log-head { height:76px; line-height:76px; padding-left:34px; font-size:28px; font-weight:bold; background:rgba(0,215,255,.12); }
+#log-head span { float:right; margin-right:34px; color:#8fb3c7; font-size:18px; font-weight:normal; }
+#full-log { margin:24px 30px; width:1760px; height:840px; overflow:hidden; white-space:pre-wrap; color:#d5f5ff; font-size:19px; line-height:1.35; }
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 26px;
+}
+#art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 28px;
+}

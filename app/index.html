@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+  <title>AirTizen</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="bg-a"></div>
+  <div id="bg-b"></div>
+  <div id="shell">
+    <div id="side">
+      <div class="brand-mark"><img src="assets/airtizen-logo.png" alt="AirTizen logo"></div>
+      <div class="brand-title">AirTizen</div>
+      <div class="brand-sub">AirPlay Receiver</div>
+      <div class="nav-item active" data-focus="1" data-action="home">Receiver</div>
+      <div class="nav-item" data-focus="1" data-action="diagnostics">Diagnostics</div>
+      <div class="nav-item" data-focus="1" data-action="settings">Settings</div>
+      <div id="hint-box">OK: select<br>Blue: full log<br>Red: clear log<br>Back: close</div>
+    </div>
+    <div id="main">
+      <div id="topbar">
+        <div>
+          <div id="title">AirTizen TV Receiver</div>
+          <div id="subtitle">Ready for Apple Music, Spotify, TIDAL and every iOS audio app through AirPlay audio.</div>
+        </div>
+        <div id="clock">--:--</div>
+      </div>
+
+      <div id="hero" data-focus="1" data-action="start">
+        <div class="orb"><div class="orb-dot"></div></div>
+        <div class="hero-copy">
+          <div class="label">Receiver status</div>
+          <div id="hero-status">Starting native core…</div>
+          <div id="hero-detail">AirTizen advertises AirPlay/RAOP and waits for your iPhone.</div>
+        </div>
+        <div id="hero-pill">START</div>
+      </div>
+
+      <div id="cards">
+        <div class="card"><div class="card-label">Bonjour</div><div id="st-mdns" class="card-value wait">checking</div></div>
+        <div class="card"><div class="card-label">RAOP</div><div id="st-raop" class="card-value wait">checking</div></div>
+        <div class="card"><div class="card-label">Pairing</div><div id="st-pair" class="card-value wait">idle</div></div>
+        <div class="card"><div class="card-label">Audio</div><div id="st-audio" class="card-value wait">idle</div></div>
+      </div>
+
+      <div id="now">
+        <div id="art"><img src="assets/airtizen-logo.png" alt="AirTizen"></div>
+        <div id="now-text">
+          <div class="label">Now receiving</div>
+          <div id="track-title">No device connected</div>
+          <div id="track-subtitle">Open Control Center on iPhone → AirPlay → AirTizen TV</div>
+        </div>
+        <div id="codec-panel">
+          <div>Codec: <span id="codec">—</span></div>
+          <div>Rate: <span id="rate">—</span></div>
+          <div>Buffer: <span id="buffer">—</span></div>
+        </div>
+      </div>
+
+      <div id="log-panel">
+        <div class="panel-title">Live log</div>
+        <pre id="small-log"></pre>
+      </div>
+    </div>
+  </div>
+  <div id="log-overlay" class="hidden">
+    <div id="log-head">AirTizen full diagnostics <span>Back: close • Red: clear</span></div>
+    <pre id="full-log"></pre>
+  </div>
+  <script src="js/native-bridge.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
