@@ -1,4 +1,5 @@
 .buildResult/
+native/build/
 app/.buildResult/
 app/release/
 tizen-studio/

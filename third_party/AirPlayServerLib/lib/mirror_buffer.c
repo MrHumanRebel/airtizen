@@ -16,6 +16,8 @@
 #include <math.h>
 #include <malloc.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <string.h>
 
 //#define DUMP_KEI_IV
 struct mirror_buffer_s {
@@ -46,8 +48,8 @@ mirror_buffer_init_aes(mirror_buffer_t *mirror_buffer, uint64_t streamConnection
     char* siv = "AirPlayStreamIV";
     unsigned char skeyall[255];
     unsigned char sivall[255];
-    sprintf(skeyall, "%s%llu", skey, streamConnectionID);
-    sprintf(sivall, "%s%llu", siv, streamConnectionID);
+    sprintf(skeyall, "%s%" PRIu64, skey, streamConnectionID);
+    sprintf(sivall, "%s%" PRIu64, siv, streamConnectionID);
     sha512_init(&ctx);
     sha512_update(&ctx, skeyall, strlen(skeyall));
     sha512_update(&ctx, eaeskey, 16);

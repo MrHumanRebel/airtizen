@@ -4,7 +4,7 @@
   function pad(n){ return n < 10 ? '0'+n : ''+n; }
   function updateClock(){ var d=new Date(); $('clock').innerHTML = pad(d.getHours()) + ':' + pad(d.getMinutes()); }
   function collectFocus(){ focusables = []; var all = document.getElementsByTagName('*'); for(var i=0;i<all.length;i++){ if(all[i].getAttribute('data-focus')==='1') focusables.push(all[i]); } }
-  function setFocus(i){ if(!focusables.length) return; if(focusables[focusIndex]) focusables[focusIndex].className = focusables[focusIndex].className.replace(/focus/g,''); focusIndex = (i + focusables.length) % focusables.length; focusables[focusIndex].className += ' focus'; }
+  function setFocus(i){ if(!focusables.length) return; if(focusables[focusIndex]) focusables[focusIndex].className = focusables[focusIndex].className.replace(/\bfocus\b/g,''); focusIndex = (i + focusables.length) % focusables.length; focusables[focusIndex].className += ' focus'; }
   function action(){ var el=focusables[focusIndex]; if(!el) return; var a=el.getAttribute('data-action'); if(a==='start') startReceiver(); if(a==='diagnostics') showLog(); if(a==='settings') log('settings selected'); }
   function setText(id, txt){ var el=$(id); if(el) el.innerHTML = txt; }
   function cls(id, name){ var el=$(id); if(el) el.className = 'card-value ' + name; }

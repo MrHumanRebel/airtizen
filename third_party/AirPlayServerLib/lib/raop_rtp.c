@@ -63,8 +63,8 @@ struct raop_rtp_s {
     /* Remote address as sockaddr */
     struct sockaddr_storage remote_saddr;
     socklen_t remote_saddr_len;
-    const char remoteName[128];
-    const char remoteDeviceId[128];
+    char remoteName[128];
+    char remoteDeviceId[128];
 
     /* MUTEX LOCKED VARIABLES START */
     /* These variables only edited mutex locked */
@@ -167,10 +167,10 @@ raop_rtp_init(logger_t *logger, raop_callbacks_t *callbacks, const unsigned char
     memset(raop_rtp->remoteName, 0, 128);
 	memset(raop_rtp->remoteDeviceId, 0, 128);
     if (remoteName != NULL) {
-        strncpy(raop_rtp->remoteName, remoteName, min(128, strlen(remoteName)));
+        snprintf(raop_rtp->remoteName, sizeof(raop_rtp->remoteName), "%s", remoteName);
     }
 	if (remoteDeviceId != NULL) {
-		strncpy(raop_rtp->remoteDeviceId, remoteDeviceId, min(128, strlen(remoteDeviceId)));
+		snprintf(raop_rtp->remoteDeviceId, sizeof(raop_rtp->remoteDeviceId), "%s", remoteDeviceId);
 	}
 
     raop_rtp->running = 0;
@@ -524,12 +524,14 @@ raop_rtp_thread_udp(void *arg)
                 while ((audiobuf = raop_buffer_dequeue(raop_rtp->buffer, &audiobuflen, &pts, no_resend, &sample_rate, &channels, &bits_per_sample))) {
                     pcm_data_struct pcm_data;
                     pcm_data.data_len = audiobuflen;
-                    pcm_data.data = audiobuf;
+                    pcm_data.data = (unsigned short *)audiobuf;
                     pcm_data.pts = pts;
                     pcm_data.sample_rate = sample_rate;
                     pcm_data.channels = channels;
                     pcm_data.bits_per_sample = bits_per_sample;
-                    raop_rtp->callbacks.audio_process(raop_rtp->callbacks.cls, &pcm_data, raop_rtp->remoteName, raop_rtp->remoteDeviceId);
+                    if (raop_rtp->callbacks.audio_process) {
+                        raop_rtp->callbacks.audio_process(raop_rtp->callbacks.cls, &pcm_data, raop_rtp->remoteName, raop_rtp->remoteDeviceId);
+                    }
                 }
                 /* Handle possible resend requests */
                 if (!no_resend) {
