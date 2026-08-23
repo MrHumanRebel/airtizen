@@ -28,6 +28,42 @@ sdb connect <TV_IP>
 tizen install -n AirTizen.wgt
 ```
 
+## Native receiver build
+
+Host build now compiles complete RAOP/AAC runtime (useful for protocol and discovery tests):
+
+```bash
+./scripts/build-local.sh
+native/build/airtizen_runtime "AirTizen TV"
+./scripts/check-runtime-status.sh
+```
+
+Tizen native SDK build must enable service target and provide `service-app`, `dlog`, and
+`audio-io` packages from TV native toolchain:
+
+```bash
+cmake -S native -B native/build-tizen \
+  -DCMAKE_TOOLCHAIN_FILE="$TIZEN_TOOLCHAIN" \
+  -DAIRTIZEN_BUILD_TIZEN_SERVICE=ON
+cmake --build native/build-tizen
+```
+
+Stock Tizen TV does not support WGT/TPK hybrid packaging. Install signed WGT UI and
+signed native service TPK separately. Direct receiver needs native service running:
+WGT alone cannot listen on RAOP TCP port or output PCM. Partner-level certificate and
+device-tested TV native SDK remain deployment prerequisites.
+
+## Runtime architecture
+
+1. Native service listens on TCP 5000 using bundled RAOP receiver.
+2. Native mDNS advertiser publishes `_raop._tcp` and `_airplay._tcp`, including TV IPv4 A record.
+3. Decoded 16-bit PCM goes to Tizen Audio I/O (`audio_out_*`).
+4. WGT reads native service status at `127.0.0.1:45110`.
+
+No LAN relay is required when stock firmware permits installed native service to accept
+port 5000. If device policy blocks service startup or inbound TCP, external LAN relay is
+only viable fallback; WASM/WGT cannot bypass SMACK policy.
+
 ## Repository layout
 
 ```text

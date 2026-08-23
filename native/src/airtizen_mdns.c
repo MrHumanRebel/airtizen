@@ -18,6 +18,7 @@ static int g_sock = -1;
 static char g_name[96] = "AirTizen TV";
 static char g_id[32] = "A1B2C3D4E5F6";
 static unsigned short g_port = 5000;
+static struct in_addr g_address;
 
 static int u16(unsigned char *b, int p, unsigned short v) {
     b[p++] = (unsigned char)((v >> 8) & 255);
@@ -137,6 +138,33 @@ static int txt_airplay(unsigned char *b, int p, const char *instance) {
     return p;
 }
 
+static int address_record(unsigned char *b, int p, const char *host) {
+    p = name(b, p, host);
+    p = u16(b, p, 1); /* A */
+    p = u16(b, p, 1);
+    p = u32(b, p, 120);
+    p = u16(b, p, 4);
+    memcpy(b + p, &g_address.s_addr, 4);
+    return p + 4;
+}
+
+static void discover_local_address(void) {
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in peer, local;
+    socklen_t size = sizeof(local);
+    g_address.s_addr = htonl(INADDR_LOOPBACK);
+    if (fd < 0) return;
+    memset(&peer, 0, sizeof(peer));
+    peer.sin_family = AF_INET;
+    peer.sin_port = htons(53);
+    inet_pton(AF_INET, "8.8.8.8", &peer.sin_addr);
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)) == 0 &&
+        getsockname(fd, (struct sockaddr *)&local, &size) == 0) {
+        g_address = local.sin_addr;
+    }
+    close(fd);
+}
+
 static int build_packet(unsigned char *b) {
     char raop[220], air[180], host[140];
     snprintf(raop, sizeof(raop), "%s@%s._raop._tcp.local", g_id, g_name);
@@ -146,7 +174,7 @@ static int build_packet(unsigned char *b) {
     p = u16(b, p, 0);
     p = u16(b, p, 0x8400);
     p = u16(b, p, 0);
-    p = u16(b, p, 6);
+    p = u16(b, p, 7);
     p = u16(b, p, 0);
     p = u16(b, p, 0);
     p = ptr(b, p, "_raop._tcp.local", raop);
@@ -155,6 +183,7 @@ static int build_packet(unsigned char *b) {
     p = ptr(b, p, "_airplay._tcp.local", air);
     p = srv(b, p, air, g_port, host);
     p = txt_airplay(b, p, air);
+    p = address_record(b, p, host);
     return p;
 }
 
@@ -200,6 +229,7 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
     if (device_name && *device_name) snprintf(g_name, sizeof(g_name), "%s", device_name);
     if (device_id && *device_id) snprintf(g_id, sizeof(g_id), "%s", device_id);
     g_port = raop_port ? raop_port : 5000;
+    discover_local_address();
     g_running = 1;
     if (pthread_create(&g_thread, NULL, loop, NULL) != 0) {
         g_running = 0;

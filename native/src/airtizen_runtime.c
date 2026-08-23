@@ -68,7 +68,7 @@ int airtizen_runtime_start(const char *device_name) {
         return rc;
     }
     g_started = 1;
-    set_runtime_status("running", "advertising", 1, 0, "", "playing", "AirPlay/RAOP listening and mDNS advertising.", "");
+    set_runtime_status("running", "advertising", 1, 0, "", "ready", "AirPlay/RAOP listening and mDNS advertising.", "");
     return 0;
 }
 
@@ -88,6 +88,7 @@ const char *airtizen_runtime_status_json(void) {
     return g_runtime_status;
 }
 
+#ifndef AIRTIZEN_RUNTIME_NO_MAIN
 int main(int argc, char **argv) {
     const char *name = argc > 1 ? argv[1] : "AirTizen TV";
     int rc = airtizen_control_http_start(45110);
@@ -108,3 +109,4 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
+#endif
