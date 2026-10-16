@@ -50,7 +50,7 @@ static void handle_client(int fd) {
     char *end, *line, *next;
     size_t used = 0;
     int control = 0, host = 0, origin = 0, length_seen = 0;
-    int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0;
+    int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0,report_ended=0;
     int artwork=0;unsigned artwork_version=0;
     int media_init=0,media_segment=0;uint64_t media_sequence=0;
     struct timeval timeout = {1, 0};
@@ -76,7 +76,11 @@ static void handle_client(int fd) {
     }
     if(!strncmp(path,"/playback/report?",17)) {
         int parsed=0;
-        playback_report=sscanf(path,"/playback/report?generation=%u&position=%lf&duration=%lf&ready=%d&failed=%d%n",&report_generation,&report_position,&report_duration,&report_ready,&report_failed,&parsed)==5 && !path[parsed];
+        playback_report=sscanf(path,"/playback/report?generation=%u&position=%lf&duration=%lf&ready=%d&failed=%d%n",&report_generation,&report_position,&report_duration,&report_ready,&report_failed,&parsed)==5;
+        if(playback_report && path[parsed]) {
+            int tail=0;playback_report=sscanf(path+parsed,"&ended=%d%n",&report_ended,&tail)==1 && !path[parsed+tail];
+        }
+        playback_report=playback_report && (report_ready==0 || report_ready==1) && (report_failed==0 || report_failed==1) && (report_ended==0 || report_ended==1);
     }
     { int parsed=0;artwork=sscanf(path,"/artwork/%u%n",&artwork_version,&parsed)==1 && !path[parsed]; }
     media_init=!strcmp(path,"/video/init");
@@ -121,7 +125,7 @@ static void handle_client(int fd) {
     }
     if(!strcmp(method,"POST") && playback_report) {
         if(!control){respond(fd,"403 Forbidden","{\"ok\":false}");return;}
-        if(airtizen_playback_report(report_generation,report_position,report_duration,report_ready,report_failed)==0)
+        if(airtizen_playback_report(report_generation,report_position,report_duration,report_ready,report_failed,report_ended)==0)
             respond(fd,"200 OK","{\"ok\":true}");
         else respond(fd,"409 Conflict","{\"ok\":false}");
         return;

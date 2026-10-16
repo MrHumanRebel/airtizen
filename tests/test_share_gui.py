@@ -45,6 +45,12 @@ class VideoShare(unittest.TestCase):
                 self.assertAlmostEqual(status['duration'],3,delta=.2)
                 self.assertEqual(status['rate'],0)
                 airplay('/rate?value=1',b'');expect(video).to_have_js_property('paused',False)
+                # Natural media completion must close the session, not report loading forever.
+                expect(ui.locator('#share-overlay')).not_to_be_visible(timeout=10000)
+                with urllib.request.urlopen('http://127.0.0.1:45110/status') as response:
+                    self.assertFalse(json.load(response)['playback']['active'])
+                airplay('/play',plistlib.dumps({'Content-Location':location},fmt=plistlib.FMT_BINARY))
+                expect(ui.locator('#share-overlay')).to_be_visible()
                 airplay('/stop',b'');expect(ui.locator('#share-overlay')).not_to_be_visible()
                 self.assertEqual(errors,[]);browser.close()
         finally:

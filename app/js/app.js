@@ -46,7 +46,7 @@
     text('connection-state', res.ok ? (running ? 'Service connected' : 'Service stopped') : 'Service unavailable');
     $('connection-state').className = running ? 'online' : '';
     text('capability-note', caps.mirroring ? 'Screen mirroring and audio' : 'Audio receiver · Screen mirroring is not available in this build.');
-    if (caps.audioOutput === 'host_stub') text('capability-note', 'Host test mode · Audio output and screen mirroring are unavailable.');
+    if (caps.audioOutput === 'host_stub') text('capability-note', 'Host test mode · Audio output is silent; video uses the browser decoder.');
     visible($('now'), !!s.connected);
     text('device-name', s.device || 'AirPlay device');
     text('track-title', track.title || 'AirPlay audio');

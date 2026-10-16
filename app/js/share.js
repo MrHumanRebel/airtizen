@@ -3,13 +3,13 @@
   var video, overlay, hint, state, command = -1, lastReport = 0;
   function log(message) { if (global.AirTizenBridge) global.AirTizenBridge.log(message); }
   function report() {
-    if (!state || !state.active || new Date().getTime() - lastReport < 400) return;
+    if (!state || !state.active || (!video.ended && !video.error && new Date().getTime() - lastReport < 400)) return;
     lastReport = new Date().getTime();
     var position = isFinite(video.currentTime) ? video.currentTime : 0;
     var duration = isFinite(video.duration) ? video.duration : 0;
     var ready = video.readyState >= 2 && (!video.paused || state.rate === 0);
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'http://127.0.0.1:45110/playback/report?generation=' + state.generation + '&position=' + position.toFixed(3) + '&duration=' + duration.toFixed(3) + '&ready=' + (ready ? 1 : 0) + '&failed=' + (video.error ? 1 : 0), true);
+    xhr.open('POST', 'http://127.0.0.1:45110/playback/report?generation=' + state.generation + '&position=' + position.toFixed(3) + '&duration=' + duration.toFixed(3) + '&ready=' + (ready ? 1 : 0) + '&failed=' + (video.error ? 1 : 0) + '&ended=' + (video.ended ? 1 : 0), true);
     xhr.timeout = 1500; xhr.setRequestHeader('X-AirTizen-Control', '1'); xhr.send(null);
   }
   function play() {

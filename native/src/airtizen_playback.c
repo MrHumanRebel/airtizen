@@ -20,11 +20,12 @@ int airtizen_playback_play(const char *url,double fraction) {
 void airtizen_playback_stop(void){unsigned generation;pthread_mutex_lock(&lock);generation=state.generation+1;memset(&state,0,sizeof(state));state.generation=generation;state.seek=-1;pthread_mutex_unlock(&lock);}
 int airtizen_playback_rate(double rate){if(rate!=0 && rate!=1)return -1;pthread_mutex_lock(&lock);state.rate=rate;++state.command;pthread_mutex_unlock(&lock);return 0;}
 int airtizen_playback_seek(double position){if(!isfinite(position) || position<0 || position>604800)return -1;pthread_mutex_lock(&lock);state.seek=position;++state.command;pthread_mutex_unlock(&lock);return 0;}
-int airtizen_playback_report(unsigned generation,double position,double duration,int ready,int failed){
+int airtizen_playback_report(unsigned generation,double position,double duration,int ready,int failed,int ended){
     if(!isfinite(position)||!isfinite(duration)||position<0||duration<0||duration>604800||position>604800)return -1;
     pthread_mutex_lock(&lock);
     if(!state.active || generation!=state.generation){pthread_mutex_unlock(&lock);return -1;}
     state.position=position;state.duration=duration;state.ready=!!ready;state.failed=!!failed;
+    if(ended || failed){state.active=0;state.ready=0;state.rate=0;}
     pthread_mutex_unlock(&lock);return 0;
 }
 void airtizen_playback_snapshot(airtizen_playback_state *out){pthread_mutex_lock(&lock);*out=state;pthread_mutex_unlock(&lock);}

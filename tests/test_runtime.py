@@ -213,6 +213,8 @@ class Runtime(unittest.TestCase):
         self.assertEqual(len(info['pk']),32)
         self.assertNotEqual(info['deviceID'],'A1:B2:C3:D4:E5:F6')
         self.assertEqual(info['features'],0x48038381)
+        self.assertEqual({entry['type'] for entry in info['audioFormats']},{100,101})
+        self.assertTrue(all(entry['audioOutputFormats']==0x1d40000 for entry in info['audioFormats']))
 
     def test_url_video_reverse_events(self):
         def command(path,body=b''):
@@ -244,7 +246,12 @@ class Runtime(unittest.TestCase):
             generation=http()[1]['playback']['generation']
             path='/playback/report?generation='+str(generation)+'&position=1&duration=30&ready=1&failed=0'
             self.assertEqual(http(path,'POST',{'X-AirTizen-Control':'1'})[0],200)
-            event('playing');command('/rate?value=0');event('paused');command('/stop');event('stopped')
+            event('playing');command('/rate?value=0');event('paused')
+            self.assertEqual(http(path+'&ended=2','POST',{'X-AirTizen-Control':'1'})[0],404)
+            self.assertEqual(http(path+'&ended=1','POST',{'X-AirTizen-Control':'1'})[0],200)
+            event('stopped')
+            self.assertFalse(http()[1]['playback']['active'])
+            command('/stop')
             self.assertEqual(http()[1]['service'],'running')
         with urllib.request.urlopen('http://127.0.0.1:5000/server-info',timeout=3) as response:
             self.assertEqual(plistlib.loads(response.read())['model'],'AirTizen1,1')

@@ -98,9 +98,17 @@ class GUI(unittest.TestCase):
             data=json.load(response)
         data['status']['connected']=True
         data['status']['device']='<img src=x onerror="window.injected=true">'
+        data['nowPlaying']={'title':'<script>window.injected=true</script>', 'artist':'A' * 256, 'album':'B' * 256}
         self.page.route('http://127.0.0.1:45110/status',lambda route:route.fulfill(status=200,content_type='application/json',headers={'Access-Control-Allow-Origin':'null'},body=json.dumps(data)))
         expect(self.ui.locator('#device-name')).to_have_text(data['status']['device'])
         self.assertEqual(self.ui.locator('#device-name img').count(),0)
+        expect(self.ui.locator('#track-title')).to_have_text(data['nowPlaying']['title'])
+        self.assertEqual(self.ui.locator('#track-title script').count(),0)
+        for selector in ('#now', '#track-title', '#track-artist', 'footer'):
+            box=self.ui.locator(selector).bounding_box()
+            self.assertGreaterEqual(box['x'],0)
+            self.assertLessEqual(box['x']+box['width'],1920)
+            self.assertLessEqual(box['y']+box['height'],1080)
         self.assertIsNone(self.ui.evaluate('window.injected'))
 
 if __name__=='__main__':

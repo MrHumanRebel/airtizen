@@ -2,11 +2,11 @@
 
 An experimental AirPlay receiver for Samsung UE65MU6100 / Tizen 3.0, with a TV remote friendly web UI and a native receiver core.
 
-**This is not a production-ready full AirPlay implementation.** Screen mirroring has no TV video renderer; ALAC music, AirPlay video streaming, AirPlay 2 multiroom and DRM playback are not implemented or verified. The WGT is a UI, not a standalone receiver. Publishing a WGT does not make those features work.
+**Experimental: production acceptance on this TV is still outstanding.** The receiver implements encrypted ALAC/AAC audio, H.264 mirroring transport with a browser MSE renderer, music metadata/artwork, and HTTP URL video/audio sharing with playback controls. These paths have Linux/Chromium regression coverage. Real iPhone interoperability, Tizen 3.0 rendering and synchronized mirroring audio/video have not been established. AirPlay 2 multiroom, photo sharing and DRM playback are unsupported. The WGT requires a separately running native receiver; it is not a standalone receiver.
 
 ## Development
 
-Requirements: Linux, GCC/G++, CMake 3.19–3.x, Make, Python 3.10+, Node.js and curl. The bundled fixed-point codec and crypto are compiled with `-fwrapv` under GCC/Clang so their intended wrapping arithmetic has defined compiler semantics. No sanitizer checks are disabled.
+Requirements: Linux, GCC/G++, CMake 3.19–3.x, Make, pkg-config, Python 3.12+, Node.js and curl. The build downloads a checksum-pinned minimal FFmpeg 7.1.5 dependency; cache it outside the checkout. The bundled fixed-point codec and crypto are compiled with `-fwrapv` under GCC/Clang so their intended wrapping arithmetic has defined compiler semantics. No sanitizer checks are disabled.
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
@@ -15,9 +15,11 @@ ctest --test-dir native/build --output-on-failure
 python3 tests/test_release.py
 python3 -m playwright install chromium
 python3 tests/test_gui.py
+python3 tests/test_mirror_gui.py
+python3 tests/test_share_gui.py
 ```
 
-The three CTest targets exercise encrypted AAC-ELD RTP decoding, receiver callbacks (including volume/mute and partial writes), and real-process protocol integration. The integration suite includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, mDNS records and repeated receiver restarts. Browser tests use Chromium and the actual native HTTP bridge. None proves compatibility with an Apple device or Tizen TV.
+The seven CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
 
 For manual development:
 
@@ -41,9 +43,9 @@ Configure the repository Actions secrets documented in [BUILD_GITHUB_ACTIONS.md]
 
 ## Samsung TV deployment
 
-The current architecture requires separate WGT and native service TPK packages. The #8 research reports that TV hybrid WGT/TPK bundling did not install the service, and service startup on stock firmware remained unresolved. Later TCP reachability results are encouraging; they do not establish a working Tizen 3.0 receiver. Do not assume either that native service startup works or that inbound connections are universally blocked.
+Sideloading requires enabling Samsung TV Developer Mode and a distributor certificate authorizing the TV. Normal consumer mode alone does not provide an installation path. The current architecture requires separate WGT and native service TPK packages. The #8 research reports that TV hybrid WGT/TPK bundling did not install the service, and service startup on stock firmware remained unresolved. Later TCP reachability results are encouraging; they do not establish a working Tizen 3.0 receiver. Do not assume either that native service startup works or that inbound connections are universally blocked.
 
-The native source can be built with `AIRTIZEN_BUILD_TIZEN_SERVICE=ON` only with a compatible, device-tested Tizen native SDK providing `service-app`, `dlog` and `audio-io`. There is no verified TV TPK packaging pipeline yet. A native decoder/surface path is needed for mirroring. A WASM/NaCl alternative must first demonstrate networking and hardware video/audio on this exact 2017 TV; desktop WASM support is insufficient evidence.
+The native source can be built with `AIRTIZEN_BUILD_TIZEN_SERVICE=ON` only with a compatible, device-tested Tizen native SDK providing `service-app`, `dlog` and `audio-io`. There is no verified TV TPK packaging pipeline yet. The MSE renderer must be tested against this TV’s browser, H.264 decoder and memory limits; desktop Chromium success does not prove Tizen support. A WASM/NaCl alternative must first demonstrate networking and hardware video/audio on this exact 2017 TV; desktop WASM support is insufficient evidence.
 
 See [production readiness and research](docs/PRODUCTION_READINESS.md) for evidence, outstanding work and the physical-device acceptance matrix. No signing credentials belong in source or chat.
 
