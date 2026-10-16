@@ -1,8 +1,10 @@
 /* HTTP video controls served on the receiver's AirPlay port. Included from raop.c. */
 #include "airtizen_playback.h"
+#include "airtizen_photo.h"
+#include "airtizen_video.h"
 #include <math.h>
 static void airtizen_http_reply(http_response_t **response,int code,const char *type,const char *data,int size){
-    *response=http_response_init("HTTP/1.1",code,code==200?"OK":code==404?"Not Found":code==501?"Not Implemented":"Bad Request");
+    *response=http_response_init("HTTP/1.1",code,code==200?"OK":code==404?"Not Found":code==501?"Not Implemented":code==412?"Precondition Failed":code==413?"Content Too Large":code==503?"Service Unavailable":"Bad Request");
     if(type)http_response_add_header(*response,"Content-Type",type);
     if(!size)http_response_add_header(*response,"Content-Length","0");
     http_response_finish(*response,data,size);
@@ -23,6 +25,12 @@ static int airtizen_airplay_http(http_request_t *request,http_response_t **respo
         plist_dict_set_item(info,"srcvers",plist_new_string("220.68"));
         plist_to_xml(info,&encoded,&size);plist_free(info);
         airtizen_http_reply(response,200,"text/x-apple-plist+xml",encoded,(int)size);free(encoded);return 1;
+    }
+    if(!strcmp(method,"PUT") && !strcmp(url,"/photo")){
+        const char *action=http_request_get_header(request,"X-Apple-AssetAction");
+        int result=airtizen_photo_put(action,http_request_get_header(request,"X-Apple-AssetKey"),http_request_get_header(request,"X-Apple-Session-ID"),http_request_get_header(request,"X-Apple-Transition"),data,(size_t)length);
+        if(result==200 && (!action || strcmp(action,"cacheOnly"))){airtizen_playback_stop();airtizen_video_reset();}
+        airtizen_http_reply(response,result,NULL,NULL,0);return 1;
     }
     if(!strcmp(method,"POST") && !strcmp(url,"/play")){
         plist_t root=NULL;char *location=NULL;double fraction=0;int result=-1;
@@ -55,9 +63,10 @@ static int airtizen_airplay_http(http_request_t *request,http_response_t **respo
                 result=airtizen_playback_play(location,fraction);free(location);free(copy);
             }
         }
+        if(result==0)airtizen_photo_reset();
         airtizen_http_reply(response,result==0?200:400,NULL,NULL,0);return 1;
     }
-    if(!strcmp(method,"POST") && !strcmp(url,"/stop")){airtizen_playback_stop();airtizen_http_reply(response,200,NULL,NULL,0);return 1;}
+    if(!strcmp(method,"POST") && !strcmp(url,"/stop")){airtizen_playback_stop();airtizen_photo_reset();airtizen_http_reply(response,200,NULL,NULL,0);return 1;}
     if(!strcmp(method,"POST") && (!strncmp(url,"/rate?value=",12)||!strncmp(url,"/scrub?position=",16))){
         int seek=!strncmp(url,"/scrub?position=",16);char *end=NULL;const char *value=url+(seek?16:12);
         double number=strtod(value,&end);int result=-1;

@@ -73,12 +73,14 @@ class ReceiverInstance:public pp::Instance {
   explicit ReceiverInstance(PP_Instance instance):pp::Instance(instance),audio_(this),started_(false){}
   virtual bool Init(uint32_t argc,const char *argn[],const char *argv[]) {
     if(audio_host)return false; /* The core deliberately owns one receiver. */
-    std::string address,id;name_="AirTizen TV";
+    std::string address,id,token;name_="AirTizen TV";
     for(uint32_t i=0;i<argc;++i) {
       if(!strcmp(argn[i],"receiver-ip"))address=argv[i];
+      else if(!strcmp(argn[i],"receiver-token"))token=argv[i];
       else if(!strcmp(argn[i],"receiver-id"))id=argv[i];
       else if(!strcmp(argn[i],"receiver-name"))name_=argv[i];
     }
+    if(airtizen_control_http_set_token(token.c_str()))return false;
     if(airtizen_mdns_set_network(address.c_str(),id.c_str()))return false;
     if(nacl_io_init_ppapi(pp_instance(),pp::Module::Get()->get_browser_interface()))return false;
     audio_host=&audio_;

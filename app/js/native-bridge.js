@@ -59,7 +59,8 @@
     try {
       xhr.open(method, runtimeBase + path, true);
       xhr.setRequestHeader('Accept', 'application/json');
-      if (method === 'POST') xhr.setRequestHeader('X-AirTizen-Control', '1');
+      if (method !== 'POST' && global.AirTizenControl) global.AirTizenControl.authorize(xhr);
+      if (method === 'POST') xhr.setRequestHeader('X-AirTizen-Control', global.AirTizenControl ? global.AirTizenControl.header() : '1');
       if (payload) xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.send(payload ? JSON.stringify(payload) : null);
     } catch (ex2) {
@@ -103,7 +104,7 @@
       pair: 'idle',
       audio: 'idle',
       connected: false,
-      detail: 'The receiver service is unavailable. Check that the AirTizen service is installed and running.'
+      detail: 'The receiver service is unavailable. Check the bundled receiver loader and network status in diagnostics.'
     });
     var failure = res && res.error ? res.error : 'runtime unavailable';
     if (this.lastFailure !== failure) log(source + ' failed: ' + failure);

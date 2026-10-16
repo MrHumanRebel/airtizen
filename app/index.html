@@ -22,6 +22,7 @@
     </main>
     <footer><span id="connection-state">Checking service</span><span>AirTizen · <span id="app-version">2.2.2</span></span></footer>
   </div>
+  <div id="photo-overlay" class="hidden"><img id="photo-a" alt="Shared AirPlay photo"><img id="photo-b" alt="Shared AirPlay photo"></div>
   <div id="share-overlay" class="hidden"><video id="shared-video" autoplay playsinline></video><div id="share-play-hint" class="hidden">Press OK to play</div></div>
   <div id="video-overlay" class="hidden"><video id="mirror-video" autoplay muted playsinline></video></div>
   <section id="settings-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -41,6 +42,7 @@
   <script src="js/platform.js"></script>
   <script src="js/embedded-receiver.js"></script>
   <script src="js/native-bridge.js"></script>
+  <script src="js/photo.js"></script>
   <script src="js/share.js"></script>
   <script src="js/video.js"></script>
   <script src="js/app.js"></script>

@@ -2,6 +2,8 @@
 #include "airtizen_json.h"
 #include "airtizen_video.h"
 #include "airtizen_metadata.h"
+#include "airtizen_photo.h"
+#include "airtizen_playback.h"
 #include "raop.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -142,6 +144,7 @@ static void cb_video_process(void *cls, h264_decode_struct *data, const char *na
     if (!data || !data->data || data->data_len <= 0) return;
     result=data->frame_type==0 ? airtizen_video_configure(data->data,(size_t)data->data_len) :
         airtizen_video_frame(data->data,(size_t)data->data_len,data->pts);
+    if(data->frame_type==0 && result==0){airtizen_photo_reset();airtizen_playback_stop();}
     pthread_mutex_lock(&g_lock);
     if(data->frame_type!=0)++g_state.video_frames;
     if(result<0) snprintf(g_state.last_error,sizeof(g_state.last_error),"invalid_video_stream");

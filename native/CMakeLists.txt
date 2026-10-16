@@ -88,6 +88,7 @@ add_library(airtizen_core STATIC
   src/airtizen_aac.c
   src/airtizen_h264.c
   src/airtizen_video.c
+  src/airtizen_photo.c
   src/airtizen_playback.c
   src/airtizen_metadata.c
   src/airtizen_mdns.c
@@ -132,6 +133,10 @@ if(AIRTIZEN_BUILD_TIZEN_SERVICE)
 endif()
 
 if(BUILD_TESTING AND NOT AIRTIZEN_BUILD_TIZEN_SERVICE AND NOT AIRTIZEN_BUILD_NACL_MODULE)
+  add_executable(airtizen_photo_test ../tests/test_photo.c src/airtizen_photo.c)
+  target_link_libraries(airtizen_photo_test PRIVATE Threads::Threads)
+  target_compile_options(airtizen_photo_test PRIVATE -UNDEBUG)
+  add_test(NAME photo_cache_and_bounds COMMAND airtizen_photo_test)
   add_executable(airtizen_nacl_platform_test ../tests/test_nacl_platform.c)
   target_link_libraries(airtizen_nacl_platform_test PRIVATE airtizen_core)
   target_compile_options(airtizen_nacl_platform_test PRIVATE -UNDEBUG)
@@ -142,7 +147,7 @@ if(BUILD_TESTING AND NOT AIRTIZEN_BUILD_TIZEN_SERVICE AND NOT AIRTIZEN_BUILD_NAC
   target_link_libraries(airtizen_nacl_audio_test PRIVATE Threads::Threads)
   target_compile_options(airtizen_nacl_audio_test PRIVATE -UNDEBUG)
   add_test(NAME nacl_audio_queue COMMAND airtizen_nacl_audio_test)
-  add_executable(airtizen_core_test ../tests/test_core.c src/airtizen_core.c src/airtizen_json.c src/airtizen_video.c src/airtizen_metadata.c)
+  add_executable(airtizen_core_test ../tests/test_core.c src/airtizen_core.c src/airtizen_json.c src/airtizen_video.c src/airtizen_metadata.c src/airtizen_photo.c src/airtizen_playback.c)
   target_link_libraries(airtizen_core_test PRIVATE Threads::Threads m PkgConfig::AIRTIZEN_AVCODEC)
   # Assertions remain enabled even when the application is built in Release mode.
   target_compile_options(airtizen_core_test PRIVATE -UNDEBUG)

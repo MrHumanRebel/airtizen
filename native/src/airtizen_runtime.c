@@ -5,9 +5,11 @@
 #include "airtizen_json.h"
 #include "airtizen_video.h"
 #include "airtizen_playback.h"
+#include "airtizen_photo.h"
 #include "airtizen_metadata.h"
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
@@ -44,7 +46,7 @@ int airtizen_runtime_start(const char *device_name) {
 }
 void airtizen_runtime_stop(void) {
     pthread_mutex_lock(&g_lock);
-    if (g_started) { airtizen_mdns_stop(); airtizen_core_stop(); airtizen_playback_stop(); g_started = 0; }
+    if (g_started) { airtizen_mdns_stop(); airtizen_core_stop(); airtizen_playback_stop(); airtizen_photo_reset(); g_started = 0; }
     g_error[0] = 0;
     pthread_mutex_unlock(&g_lock);
 }
@@ -52,6 +54,7 @@ const char *airtizen_runtime_status_json(void) {
     airtizen_core_state state;
     airtizen_video_state video;
     airtizen_playback_state playback;
+    airtizen_photo_state photo;
     airtizen_metadata_state metadata;
     char title[1540],artist[1540],album[1540];
     char receiver[300], device[800], error[800], audio[200], codec[128], mime[500], share_url[12300], logs[10000];
@@ -61,6 +64,7 @@ const char *airtizen_runtime_status_json(void) {
     airtizen_core_snapshot(&state);
     airtizen_video_snapshot(&video);
     airtizen_playback_snapshot(&playback);
+    airtizen_photo_snapshot(&photo);
     airtizen_metadata_snapshot(&metadata);
     airtizen_json_quote(title,sizeof(title),metadata.title);airtizen_json_quote(artist,sizeof(artist),metadata.artist);airtizen_json_quote(album,sizeof(album),metadata.album);
     airtizen_json_quote(share_url,sizeof(share_url),playback.url);
@@ -76,11 +80,12 @@ const char *airtizen_runtime_status_json(void) {
     airtizen_core_logs_json(logs, sizeof(logs));
     snprintf(g_json, sizeof(g_json),
         "{\"ok\":true,\"service\":\"%s\",\"receiverName\":%s,"
-        "\"capabilities\":{\"audio\":true,\"mirroring\":true,\"videoStreaming\":true,\"drm\":false,\"productionReady\":false,\"audioOutput\":\"%s\"},"
+        "\"capabilities\":{\"audio\":true,\"mirroring\":true,\"videoStreaming\":true,\"photos\":true,\"photoCaching\":true,\"slideshow\":false,\"drm\":false,\"productionReady\":false,\"audioOutput\":\"%s\"},"
         "\"protocols\":{\"airplay\":{\"enabled\":true,\"state\":\"%s\",\"discoverable\":%s,\"connected\":%s,\"device\":%s,\"lastError\":%s}},"
         "\"audio\":{\"state\":%s,\"sampleRate\":%u,\"bytesReceived\":%llu},"
         "\"video\":{\"available\":%s,\"generation\":%u,\"start\":%llu,\"latest\":%llu,\"width\":%u,\"height\":%u,\"mime\":%s,\"framesReceived\":%llu},"
         "\"nowPlaying\":{\"title\":%s,\"artist\":%s,\"album\":%s,\"artwork\":%u,\"positionSamples\":%u,\"durationSamples\":%u},"
+        "\"photo\":{\"active\":%s,\"generation\":%u,\"width\":%u,\"height\":%u,\"dissolve\":%s,\"ready\":%s,\"failed\":%s},"
         "\"playback\":{\"active\":%s,\"generation\":%u,\"command\":%u,\"url\":%s,\"fraction\":%.9g,\"rate\":%.9g,\"seek\":%.9g},"
         "\"status\":{\"mdns\":\"%s\",\"raop\":\"%s\",\"pair\":\"%s\",\"audio\":%s,\"connected\":%s,\"device\":%s,"
         "\"codec\":%s,\"rate\":\"%u\",\"buffer\":\"adaptive\",\"detail\":\"%s\",\"lastError\":%s},\"logs\":%s}",
@@ -96,6 +101,7 @@ const char *airtizen_runtime_status_json(void) {
         audio, state.sample_rate, (unsigned long long)state.audio_bytes,
         video.available ? "true" : "false",video.generation,(unsigned long long)video.start,(unsigned long long)video.latest,video.width,video.height,mime,(unsigned long long)state.video_frames,
         title,artist,album,metadata.artwork,metadata.progress,metadata.total,
+        photo.active?"true":"false",photo.generation,photo.width,photo.height,photo.dissolve?"true":"false",photo.ready?"true":"false",photo.failed?"true":"false",
         playback.active ? "true" : "false",playback.generation,playback.command,share_url,playback.fraction,playback.rate,playback.seek,
         mdns ? "advertising" : "offline", state.running ? "listening" : "offline", state.paired ? "verified" : "idle", audio,
         state.connected ? "true" : "false", device, codec, state.sample_rate,
@@ -109,6 +115,7 @@ static void stop_signal(int sig) { (void)sig; g_stop = 1; }
 int main(int argc, char **argv) {
     int rc;
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal); signal(SIGPIPE, SIG_IGN);
+    {const char *token=getenv("AIRTIZEN_CONTROL_TOKEN");if(token && airtizen_control_http_set_token(token)){fprintf(stderr,"invalid control token configuration\n");return 1;}}
     rc = airtizen_runtime_start(argc > 1 ? argv[1] : "AirTizen TV");
     if (rc != 0) { fprintf(stderr, "runtime start failed: %d\n", rc); return 1; }
     rc = airtizen_control_http_start(45110);

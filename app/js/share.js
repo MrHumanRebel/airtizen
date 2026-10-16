@@ -10,7 +10,7 @@
     var ready = video.readyState >= 2 && (!video.paused || state.rate === 0);
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://127.0.0.1:45110/playback/report?generation=' + state.generation + '&position=' + position.toFixed(3) + '&duration=' + duration.toFixed(3) + '&ready=' + (ready ? 1 : 0) + '&failed=' + (video.error ? 1 : 0) + '&ended=' + (video.ended ? 1 : 0), true);
-    xhr.timeout = 1500; xhr.setRequestHeader('X-AirTizen-Control', '1'); xhr.send(null);
+    xhr.timeout = 1500; xhr.setRequestHeader('X-AirTizen-Control', global.AirTizenControl ? global.AirTizenControl.header() : '1'); xhr.send(null);
   }
   function play() {
     var result;
