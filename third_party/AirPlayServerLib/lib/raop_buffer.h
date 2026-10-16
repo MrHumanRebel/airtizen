@@ -27,6 +27,8 @@ raop_buffer_t *raop_buffer_init(logger_t *logger,
                                 const unsigned char *aesiv,
 								const unsigned char *ecdh_secret);
 
+/* Configure before starting producer threads: ct=2 ALAC, ct=8 AAC-ELD. */
+int raop_buffer_configure_audio(raop_buffer_t *buffer, unsigned ct, unsigned frames, unsigned rate, unsigned channels);
 int raop_buffer_queue(raop_buffer_t *raop_buffer, unsigned char *data, unsigned short datalen, raop_callbacks_t *callbacks);
 const void *raop_buffer_dequeue(raop_buffer_t *raop_buffer, int *length, unsigned int* pts, int no_resend, 
     uint32_t* sample_rate, uint16_t* channels, uint16_t* bits_per_sample);

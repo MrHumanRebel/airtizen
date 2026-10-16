@@ -16,12 +16,17 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
+
 
 #include "httpd.h"
 #include "netutils.h"
 #include "http_request.h"
 #include "compat.h"
 #include "logger.h"
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 struct http_connection_s {
 	int connected;
@@ -122,6 +127,9 @@ httpd_add_connection(httpd_t *httpd, int fd, unsigned char *local, int local_len
 
 	httpd->open_connections++;
 	httpd->connections[i].socket_fd = fd;
+#ifndef _WIN32
+    { struct timeval timeout={1,0};setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout)); }
+#endif
 	httpd->connections[i].connected = 1;
 	httpd->connections[i].user_data = user_data;
 	return 0;
@@ -204,9 +212,21 @@ httpd_thread(void *arg)
 		MUTEX_UNLOCK(httpd->run_mutex);
 
 		/* Set timeout value to 5ms */
-		tv.tv_sec = 1;
-		tv.tv_usec = 5000;
+		tv.tv_sec = 0;
+		tv.tv_usec = 50000;
 
+        if(httpd->callbacks.conn_poll)for(i=0;i<httpd->max_connections;++i) {
+            http_connection_t *connection=&httpd->connections[i];http_response_t *event=NULL;int status;
+            if(!connection->connected)continue;
+            status=httpd->callbacks.conn_poll(connection->user_data,&event);
+            if(status<0){httpd_remove_connection(httpd,connection);continue;}
+            if(event){
+                int size,written=0;const char *data=http_response_get_data(event,&size);
+                while(written<size){int count=send(connection->socket_fd,data+written,size-written,MSG_NOSIGNAL);if(count<=0){status=-1;break;}written+=count;}
+                http_response_destroy(event);
+                if(status<0)httpd_remove_connection(httpd,connection);
+            }
+        }
 		/* Get the correct nfds value and set rfds */
 		FD_ZERO(&rfds);
 		if (httpd->open_connections < httpd->max_connections) {
@@ -281,7 +301,8 @@ httpd_thread(void *arg)
 
 			logger_log(httpd->logger, LOGGER_DEBUG, "Receiving on socket %d", connection->socket_fd);
 			ret = recv(connection->socket_fd, buffer, sizeof(buffer), 0);
-			if (ret == 0) {
+			if (ret <= 0) {
+                if(ret<0 && errno==EINTR)continue;
 				logger_log(httpd->logger, LOGGER_INFO, "Connection closed for socket %d", connection->socket_fd);
 				httpd_remove_connection(httpd, connection);
 				continue;
@@ -313,9 +334,9 @@ httpd_thread(void *arg)
 
 					written = 0;
 					while (written < datalen) {
-						ret = send(connection->socket_fd, data+written, datalen-written, 0);
-						if (ret == -1) {
-							/* FIXME: Error happened */
+						ret = send(connection->socket_fd, data+written, datalen-written, MSG_NOSIGNAL);
+						if (ret <= 0) {
+							/* Closed or failed peer. */
 							logger_log(httpd->logger, LOGGER_INFO, "Error in sending data");
 							break;
 						}

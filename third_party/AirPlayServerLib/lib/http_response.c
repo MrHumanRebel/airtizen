@@ -87,6 +87,17 @@ http_response_init(const char *protocol, int code, const char *message)
 	return response;
 }
 
+http_response_t *http_response_init_request(const char *method,const char *path) {
+    http_response_t *response=http_response_init("HTTP/1.1",200,"OK");
+    if(!response)return NULL;
+    response->data_length=0;
+    http_response_add_data(response,method,(int)strlen(method));
+    http_response_add_data(response," ",1);
+    http_response_add_data(response,path,(int)strlen(path));
+    http_response_add_data(response," HTTP/1.1\r\n",11);
+    return response;
+}
+
 void
 http_response_destroy(http_response_t *response)
 {

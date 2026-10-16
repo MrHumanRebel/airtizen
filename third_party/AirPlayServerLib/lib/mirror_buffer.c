@@ -96,32 +96,17 @@ mirror_buffer_init(logger_t *logger,
 }
 
 void mirror_buffer_decrypt(mirror_buffer_t *mirror_buffer, unsigned char* input, unsigned char* output, int inputLen) {
-    // start decryption
-    if (mirror_buffer->nextDecryptCount > 0) {//mirror_buffer->nextDecryptCount = 10
-        for (int i = 0; i < mirror_buffer->nextDecryptCount; i++) {
-            output[i] = (input[i] ^ mirror_buffer->og[(16 - mirror_buffer->nextDecryptCount) + i]);
+    /* AirTizen: preserve CTR keystream across arbitrarily short packet boundaries. */
+    int i;
+    if (!mirror_buffer || !input || !output || inputLen <= 0) return;
+    for (i = 0; i < inputLen; ++i) {
+        if (mirror_buffer->nextDecryptCount == 0) {
+            memset(mirror_buffer->og, 0, sizeof(mirror_buffer->og));
+            AES_CTR_xcrypt_buffer(&mirror_buffer->aes_ctx, mirror_buffer->og, sizeof(mirror_buffer->og));
+            mirror_buffer->nextDecryptCount = 16;
         }
-    }
-    // process encrypted bytes
-    int encryptlen = ((inputLen - mirror_buffer->nextDecryptCount) / 16) * 16;
-    // aes decrypt
-    AES_CTR_xcrypt_buffer(&mirror_buffer->aes_ctx, input + mirror_buffer->nextDecryptCount, encryptlen);
-    // copy to output
-    memcpy(output + mirror_buffer->nextDecryptCount, input + mirror_buffer->nextDecryptCount, encryptlen);
-    int outputlength = mirror_buffer->nextDecryptCount + encryptlen;
-    // process remaining length
-    int restlen = (inputLen - mirror_buffer->nextDecryptCount) % 16;
-    int reststart = inputLen - restlen;
-    mirror_buffer->nextDecryptCount = 0;
-    if (restlen > 0) {
-        memset(mirror_buffer->og, 0, 16);
-        memcpy(mirror_buffer->og, input + reststart, restlen);
-        AES_CTR_xcrypt_buffer(&mirror_buffer->aes_ctx, mirror_buffer->og, 16);
-        for (int j = 0; j < restlen; j++) {
-            output[reststart + j] = mirror_buffer->og[j];
-        }
-        outputlength += restlen;
-        mirror_buffer->nextDecryptCount = 16 - restlen;// 差16-6=10个字节
+        output[i] = input[i] ^ mirror_buffer->og[16 - mirror_buffer->nextDecryptCount];
+        --mirror_buffer->nextDecryptCount;
     }
 }
 

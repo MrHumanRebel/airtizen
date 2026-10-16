@@ -1,175 +1,162 @@
-name: Build AirTizen WGT
+name: Validate, build and release AirTizen
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
-    branches: [ main ]
-    tags: [ '*' ]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
-env:
-  TIZEN_STUDIO_VER: 4.5.1
-  TIZEN_PROFILE_NAME: AirTizen
-  TIZEN_CERT_PASSWORD: 1234
+concurrency:
+  group: airtizen-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-wgt:
+  validate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y expect curl unzip
-
-      - name: Download Tizen Studio Web CLI
-        run: |
-          set -euo pipefail
-          curl --fail --location --retry 3 --retry-delay 5 \
-            -o tizen-installer \
-            "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
-          chmod +x tizen-installer
-
-      - name: Install Tizen Studio
-        run: |
-          set -euo pipefail
-          ./tizen-installer --accept-license "$GITHUB_WORKSPACE/tizen-studio"
-          echo "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin" >> "$GITHUB_PATH"
-          echo "$GITHUB_WORKSPACE/tizen-studio/tools" >> "$GITHUB_PATH"
-
-      - name: Prepare certificate profile
-        env:
-          CERT_PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}
-        run: |
-          set -euo pipefail
-          TIZEN_BIN="$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen"
-          PROFILE_XML="$GITHUB_WORKSPACE/tizen-studio-data/profile/profiles.xml"
-          DISTRIBUTOR_PASSWORD="tizenpkcs12passfordsigner"
-
-          mkdir -p "$(dirname "$PROFILE_XML")" "$GITHUB_WORKSPACE/app/release"
-
-          if [ -n "${{ secrets.TIZEN_CERT_P12_BASE64 }}" ]; then
-            echo "${{ secrets.TIZEN_CERT_P12_BASE64 }}" | base64 -d > "$GITHUB_WORKSPACE/airtizen.p12"
-            "$TIZEN_BIN" security-profiles add \
-              -n "$TIZEN_PROFILE_NAME" \
-              -a "$GITHUB_WORKSPACE/airtizen.p12" \
-              -p "$CERT_PASSWORD"
-          else
-            "$TIZEN_BIN" certificate \
-              -a AirTizen \
-              -p "$CERT_PASSWORD" \
-              -c HU \
-              -s Gyor \
-              -ct Gyor \
-              -o HumanRebel \
-              -n AirTizen \
-              -e airtizen@example.local \
-              -f airtizen
-            "$TIZEN_BIN" security-profiles add \
-              -n "$TIZEN_PROFILE_NAME" \
-              -a "$GITHUB_WORKSPACE/tizen-studio-data/keystore/author/airtizen.p12" \
-              -p "$CERT_PASSWORD"
-          fi
-
-          "$TIZEN_BIN" cli-config "profiles.path=$PROFILE_XML"
-          test -s "$PROFILE_XML"
-
-          # Jellyfin's working Tizen CI pipeline patches profiles.xml because
-          # headless Tizen Studio writes .pwd path references that package/sign
-          # can fail to re-read inside GitHub Actions.
-          sed -i "s|${GITHUB_WORKSPACE}/airtizen.pwd|${CERT_PASSWORD}|g" "$PROFILE_XML"
-          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/airtizen.pwd|${CERT_PASSWORD}|g" "$PROFILE_XML"
-          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.pwd|${DISTRIBUTOR_PASSWORD}|g" "$PROFILE_XML"
-          sed -i "s|${GITHUB_WORKSPACE}/tizen-studio-data/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.pwd|${DISTRIBUTOR_PASSWORD}|g" "$PROFILE_XML"
-          sed -i "s|password=\"\"|password=\"${DISTRIBUTOR_PASSWORD}\"|g" "$PROFILE_XML"
-
-          chmod 755 "$PROFILE_XML"
-          "$TIZEN_BIN" security-profiles list
-
-      - name: Build web package
-        run: |
-          set -euo pipefail
-          cd app
-          "$GITHUB_WORKSPACE/tizen-studio/tools/ide/bin/tizen" build-web \
-            -e ".*" \
-            -e "node_modules/*" \
-            -e "package*.json"
-          test -d .buildResult
-
-      - name: Package WGT
-        env:
-          TIZEN_CERT_PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD || env.TIZEN_CERT_PASSWORD }}
-        run: |
-          set -euo pipefail
-          mkdir -p app/release
-          rm -f app/release/*.wgt
-          chmod +x ./package.exp
-          export TIZEN_PROFILE_NAME="$TIZEN_PROFILE_NAME"
-          export GITHUB_WORKSPACE="$GITHUB_WORKSPACE"
-
-          set +e
-          ./package.exp
-          TIZEN_PACKAGE_STATUS=$?
-          set -e
-
-          if [ "$TIZEN_PACKAGE_STATUS" -ne 0 ] || ! find app/release -maxdepth 1 -type f -name '*.wgt' | grep -q .; then
-            echo "::warning::Signed Tizen packaging failed with status ${TIZEN_PACKAGE_STATUS}; creating unsigned WGT fallback from app/.buildResult."
-            python3 - <<'PY'
-          import os
-          import zipfile
-          from pathlib import Path
-
-          build_dir = Path('app/.buildResult')
-          release_dir = Path('app/release')
-          output = release_dir / 'AirTizen.wgt'
-
-          if not build_dir.is_dir():
-              raise SystemExit('app/.buildResult does not exist')
-          if not (build_dir / 'config.xml').is_file():
-              raise SystemExit('config.xml is missing from app/.buildResult')
-
-          release_dir.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
-              for root, dirs, files in os.walk(build_dir):
-                  dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules'}]
-                  for filename in files:
-                      path = Path(root) / filename
-                      arcname = path.relative_to(build_dir).as_posix()
-                      archive.write(path, arcname)
-
-          if output.stat().st_size <= 0:
-              raise SystemExit('created WGT is empty')
-          print(f'Created fallback WGT: {output} ({output.stat().st_size} bytes)')
-          PY
-          fi
-
-          ls -lah app/release
-          test -n "$(find app/release -maxdepth 1 -type f -name '*.wgt' -print -quit)"
-
-      - name: Print Tizen CLI diagnostics on failure
-        if: failure()
-        run: |
-          set +e
-          echo "::group::Tizen CLI logs"
-          find "$GITHUB_WORKSPACE" "$HOME" -path '*cli*.log' -type f -print -exec sh -c 'echo "--- $1"; tail -n 240 "$1"' _ {} \;
-          echo "::endgroup::"
-          echo "::group::Release directory"
-          ls -lah app/release || true
-          echo "::endgroup::"
-
-      - name: Upload WGT artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          name: AirTizen-wgt
-          path: app/release/*.wgt
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python3 -m pip install -r requirements-dev.txt
+      - name: Build and test native receiver
+        run: |
+          set -euo pipefail
+          ./scripts/build-local.sh
+          ctest --test-dir native/build --output-on-failure
+          python3 tests/test_release.py
+          node --check app/js/share.js
+          node --check app/js/video.js
+          node --check app/js/platform.js
+          node --check app/js/app.js
+          node --check app/js/native-bridge.js
+          npx --yes acorn@8.15.0 --ecma5 app/js/share.js > /dev/null
+          npx --yes acorn@8.15.0 --ecma5 app/js/video.js > /dev/null
+          npx --yes acorn@8.15.0 --ecma5 app/js/platform.js > /dev/null
+          npx --yes acorn@8.15.0 --ecma5 app/js/app.js > /dev/null
+          npx --yes acorn@8.15.0 --ecma5 app/js/native-bridge.js > /dev/null
+      - name: Browser integration tests
+        run: |
+          set -euo pipefail
+          python3 -m playwright install --with-deps chromium
+          python3 tests/test_gui.py
+          python3 tests/test_mirror_gui.py
+          python3 tests/test_share_gui.py
+      - name: Address and undefined behavior sanitizers
+        run: |
+          set -euo pipefail
+          cmake -S native -B /tmp/airtizen-asan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+            -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          cmake --build /tmp/airtizen-asan -j2
+          ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 ctest --test-dir /tmp/airtizen-asan --output-on-failure
+
+  signed-wgt:
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      TIZEN_STUDIO_VER: 4.5.1
+      TIZEN_PROFILE_NAME: AirTizen
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Require configured signing identity
+        env:
+          CERT: ${{ secrets.TIZEN_CERT_P12_BASE64 }}
+          PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD }}
+          DISTRIBUTOR: ${{ secrets.TIZEN_DISTRIBUTOR_P12_BASE64 }}
+          DISTRIBUTOR_PASSWORD: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for required in CERT PASSWORD DISTRIBUTOR DISTRIBUTOR_PASSWORD; do
+            if [ -z "${!required}" ]; then
+              echo "::error::Configure author and Samsung TV distributor certificates/passwords. No unsigned release fallback is permitted."
+              exit 1
+            fi
+          done
+      - name: Calculate version and stage UI
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/version.py)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python3 scripts/stage-web.py "$RUNNER_TEMP/airtizen-web" "$version"
+      - name: Install verified official Tizen Web CLI
+        env:
+          AIRTIZEN_TIZEN_USER_ROOT: ${{ runner.temp }}/tizen-user
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl unzip
+          bash scripts/install-tizen-web-cli.sh
+          echo "TIZEN_STUDIO_ROOT=$AIRTIZEN_TIZEN_USER_ROOT/tizen-studio" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=-Duser.home=$AIRTIZEN_TIZEN_USER_ROOT" >> "$GITHUB_ENV"
+      - name: Configure signing and build signed WGT
+        env:
+          TIZEN_CERT_P12_BASE64: ${{ secrets.TIZEN_CERT_P12_BASE64 }}
+          TIZEN_CERT_PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD }}
+          TIZEN_DISTRIBUTOR_P12_BASE64: ${{ secrets.TIZEN_DISTRIBUTOR_P12_BASE64 }}
+          TIZEN_DISTRIBUTOR_PASSWORD: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
+        run: bash scripts/build-signed-wgt.sh "$RUNNER_TEMP/airtizen-web" "$GITHUB_WORKSPACE/app/release"
+      - name: Verify signed package and generate checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 tests/test_wgt_crypto.py app/release/AirTizen.wgt "$TIZEN_STUDIO_ROOT/jdk"
+          cd app/release
+          sha256sum AirTizen.wgt > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: AirTizen-${{ steps.version.outputs.version }}-signed-wgt
+          path: |
+            app/release/AirTizen.wgt
+            app/release/SHA256SUMS
           if-no-files-found: error
 
-      - name: Release WGT on tags
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/release/*.wgt
+  release:
+    needs: [validate, signed-wgt]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download verified build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.signed-wgt.outputs.version }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run download "$RUN_ID" --name "AirTizen-$VERSION-signed-wgt" --dir release
+      - name: Publish experimental release without moving existing tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.signed-wgt.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum -c SHA256SUMS
+          cd ..
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "::notice::Release v$VERSION already exists; leaving its artifacts unchanged."
+            exit 0
+          fi
+          gh release create "v$VERSION" release/AirTizen.wgt release/SHA256SUMS \
+            --target "$COMMIT" --prerelease --title "AirTizen $VERSION (experimental)" \
+            --notes-file docs/RELEASE_NOTES.md

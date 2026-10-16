@@ -1,5 +1,21 @@
 # Third-party notices
 
-This repository includes AirPlayServerLib source code from the user-provided AirPlayServer reference archive as a porting donor under `third_party/AirPlayServerLib`.
+The bundled `third_party/AirPlayServerLib` came from a user-provided reference archive. Its precise upstream revision/provenance is not established. Preserve every existing copyright and license header.
 
-Keep upstream license headers and notices intact when publishing.
+The top-level MIT license applies to original AirTizen work; it does not relicense bundled components. In particular:
+
+| Component | License evidence in this checkout |
+| --- | --- |
+| RAOP and plist sources | LGPL 2.1 or later headers in `lib/raop.c`, `lib/plist/plist.c` and related files |
+| PlayFair | GPLv3 text at `third_party/AirPlayServerLib/lib/playfair/LICENSE.md` |
+| FDK AAC | Fraunhofer FDK AAC license at `third_party/AirPlayServerLib/lib/fdk-aac/NOTICE` |
+| axTLS crypto | BSD-style terms in `third_party/AirPlayServerLib/lib/crypto/crypto.h` and related files |
+| curve25519-donna | BSD-style terms in `third_party/AirPlayServerLib/lib/curve25519/curve25519-donna.c` |
+
+This is an initial inventory, not a completed licensing/provenance audit. The combined native binary must not be described as MIT-only. Resolve redistribution compatibility and include the required complete notices, corresponding source and build material before distributing a native service TPK. No UxPlay or Moonlight implementation was imported as part of the research.
+
+## Downloaded media dependency
+
+`scripts/build-media-deps.sh` builds a minimal static FFmpeg 7.1.5 dependency from the official FFmpeg repository, commit `3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587`. The codeload archive SHA-256 is `83220fe0807da10df19714176f02ec3d3812ef0e055f69e940d01b3ad1379cdb`. It enables ALAC/H.264 decoding, H.264 parsing and MP4 muxing, without GPL/nonfree configuration flags. FFmpeg's applicable LGPL notices and source are in the downloaded source tree (`COPYING.LGPLv2.1`, `LICENSE.md` and individual headers).
+
+Before distributing a statically linked native binary, provide the corresponding dependency source, build configuration, notices and any object/relinking material required by the applicable licenses. This build script is reproducibility evidence, not a completed redistribution compliance assessment. No native TPK is released by the current workflow.

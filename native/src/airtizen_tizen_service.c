@@ -15,7 +15,7 @@ static bool on_create(void *data)
     rc = airtizen_control_http_start(45110);
     if (rc != 0) {
         dlog_print(DLOG_ERROR, LOG_TAG, "control HTTP start failed rc=%d", rc);
-        return true;
+        return false;
     }
 
     rc = airtizen_runtime_start("AirTizen TV");

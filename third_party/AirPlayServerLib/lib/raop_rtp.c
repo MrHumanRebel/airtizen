@@ -386,7 +386,7 @@ raop_rtp_thread_time(void *arg)
     struct sockaddr_storage saddr;
     socklen_t saddrlen;
     unsigned char packet[128];
-    unsigned int packetlen;
+    int packetlen;
     unsigned char time[32]={0x80,0xd2,0x00,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
             ,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
     };
@@ -411,6 +411,7 @@ raop_rtp_thread_time(void *arg)
         saddrlen = sizeof(saddr);
         packetlen = recvfrom(raop_rtp->tsock, (char *)packet, sizeof(packet), 0,
                              (struct sockaddr *)&saddr, &saddrlen);
+        if (packetlen < 32) continue;
         int type_t = packet[1] & ~0x80;
         logger_log(raop_rtp->logger, LOGGER_DEBUG, "raop_rtp_thread_time receive time type_t 0x%02x, packetlen = %d", type_t, packetlen);
         if (type_t == 0x53) {
@@ -442,7 +443,7 @@ raop_rtp_thread_udp(void *arg)
     raop_rtp_t *raop_rtp = arg;
     logger_log(raop_rtp->logger, LOGGER_DEBUG, "raop_rtp_thread_udp");
     unsigned char packet[RAOP_PACKET_LEN];
-    unsigned int packetlen;
+    int packetlen;
     struct sockaddr_storage saddr;
     socklen_t saddrlen;
     assert(raop_rtp);
@@ -488,6 +489,7 @@ raop_rtp_thread_udp(void *arg)
 
             memcpy(&raop_rtp->control_saddr, &saddr, saddrlen);
             raop_rtp->control_saddr_len = saddrlen;
+            if (packetlen < 4) continue;
             int type_c = packet[1] & ~0x80;
             logger_log(raop_rtp->logger, LOGGER_DEBUG, "raop_rtp_thread_udp type_c 0x%02x, packetlen = %d", type_c, packetlen);
             if (type_c == 0x56) {
@@ -505,6 +507,7 @@ raop_rtp_thread_udp(void *arg)
             packetlen = recvfrom(raop_rtp->dsock, (char *)packet, sizeof(packet), 0,
                                  (struct sockaddr *)&saddr, &saddrlen);
             // rtp payload type
+            if (packetlen < 12) continue;
             int type_d = packet[1] & ~0x80;
             //logger_log(raop_rtp->logger, LOGGER_DEBUG, "raop_rtp_thread_udp type_d 0x%02x, packetlen = %d", type_d, packetlen);
 
@@ -545,6 +548,17 @@ raop_rtp_thread_udp(void *arg)
     return 0;
 }
 
+int
+raop_rtp_configure_audio(raop_rtp_t *rtp, unsigned ct, unsigned frames, unsigned rate, unsigned channels) {
+    int result=-1;
+    if (!rtp) return -1;
+    MUTEX_LOCK(rtp->run_mutex);
+    if (!rtp->running && rtp->joined) result=raop_buffer_configure_audio(rtp->buffer,ct,frames,rate,channels);
+    MUTEX_UNLOCK(rtp->run_mutex);
+    if (result==0 && rtp->callbacks.audio_format) rtp->callbacks.audio_format(rtp->callbacks.cls,ct);
+    return result;
+}
+
 void
 raop_rtp_start_audio(raop_rtp_t *raop_rtp, int use_udp, unsigned short control_rport, unsigned short timing_rport,
                      unsigned short *control_lport, unsigned short *timing_lport, unsigned short *data_lport)
@@ -579,6 +593,7 @@ raop_rtp_start_audio(raop_rtp_t *raop_rtp, int use_udp, unsigned short control_r
     raop_rtp->running = 1;
     raop_rtp->joined = 0;
 
+    if(raop_rtp->callbacks.connected)raop_rtp->callbacks.connected(raop_rtp->callbacks.cls,raop_rtp->remoteName,raop_rtp->remoteDeviceId);
     THREAD_CREATE(raop_rtp->thread, raop_rtp_thread_udp, raop_rtp);
     THREAD_CREATE(raop_rtp->thread_time, raop_rtp_thread_time, raop_rtp);
     MUTEX_UNLOCK(raop_rtp->run_mutex);
@@ -720,4 +735,5 @@ raop_rtp_stop(raop_rtp_t *raop_rtp)
     MUTEX_LOCK(raop_rtp->run_mutex);
     raop_rtp->joined = 1;
     MUTEX_UNLOCK(raop_rtp->run_mutex);
+    if(raop_rtp->callbacks.disconnected)raop_rtp->callbacks.disconnected(raop_rtp->callbacks.cls,raop_rtp->remoteName,raop_rtp->remoteDeviceId);
 }

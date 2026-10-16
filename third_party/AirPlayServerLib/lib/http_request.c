@@ -115,6 +115,9 @@ on_body(http_parser *parser, const char *at, size_t length)
 {
 	http_request_t *request = parser->data;
 
+	/* Bound unauthenticated request bodies before allocating (AirTizen). */
+	if (length > 1024 * 1024 || request->datalen > 1024 * 1024 - length) return -1;
+
 	request->data = realloc(request->data, request->datalen+length);
 	assert(request->data);
 
@@ -142,7 +145,7 @@ http_request_init(void)
 	if (!request) {
 		return NULL;
 	}
-	http_parser_init(&request->parser, HTTP_REQUEST);
+	http_parser_init(&request->parser, HTTP_BOTH);
 	request->parser.data = request;
 
 	request->parser_settings.on_url = &on_url;
