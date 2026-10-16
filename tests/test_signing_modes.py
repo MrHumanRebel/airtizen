@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,11 +39,58 @@ class Signing(unittest.TestCase):
     def test_no_secrets_public_package(self):
         result = self.build()
         self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn('Author password:', result.stdout)
+        self.assertNotIn('Distributor1 password:', result.stdout)
         self.assertEqual((self.output/'SIGNING-MODE.txt').read_text().splitlines(),
                          ['public-community-author', 'public-sdk-distributor'])
         subprocess.run([sys.executable, str(ROOT/'tests/test_wgt_crypto.py'),
                         str(self.output/'AirTizen.wgt'), str(self.sdk/'jdk'),
                         '--allow-sdk-distributor'], check=True)
+
+    def test_profile_signs_without_terminal_or_password_storage(self):
+        tizen = str(self.sdk/'tools/ide/bin/tizen')
+        profile = self.directory/'profiles.xml'
+        profiles = ET.Element('profiles', active='HeadlessRegression', version='3.1')
+        entry = ET.SubElement(profiles, 'profile', name='HeadlessRegression')
+        for role, key in (('0', self.public), ('1', self.distributor)):
+            ET.SubElement(entry, 'profileitem', distributor=role, key=str(key),
+                          password=str(self.directory/('missing-'+role+'.pwd')), ca='', rootca='')
+        ET.ElementTree(profiles).write(profile, encoding='utf-8', xml_declaration=True)
+        self.env.update(TIZEN_CERT_PASSWORD='1234',
+                        TIZEN_DISTRIBUTOR_PASSWORD='tizenpkcs12passfordsigner')
+        config = subprocess.check_output([tizen, 'cli-config', '-l'], env=self.env, text=True)
+        original = next((line.partition('=')[2].strip() for line in config.splitlines()
+                         if line.partition('=')[0].strip() == 'profiles.path'),
+                        str(self.sdk)+'-data/profile/profiles.xml')
+        try:
+            subprocess.run([tizen, 'cli-config', 'profiles.path='+str(profile)], env=self.env,
+                           check=True, stdout=subprocess.DEVNULL)
+            subprocess.run([tizen, 'build-web', '--', str(self.stage)], env=self.env,
+                           check=True, stdout=subprocess.DEVNULL)
+            command = [tizen, 'package', '-t', 'wgt', '-s', 'HeadlessRegression']
+            self.output.mkdir()
+            before = subprocess.run(command+['-o', str(self.output), '--',
+                                             str(self.stage/'.buildResult')], env=self.env,
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, timeout=30, text=True)
+            self.assertNotEqual(before.returncode, 0, 'Missing .pwd storage unexpectedly worked')
+            self.assertFalse(list(self.output.glob('*.wgt')))
+            subprocess.run([sys.executable, str(ROOT/'scripts/prepare-signing-profile.py'),
+                            str(profile), 'HeadlessRegression'], env=self.env, check=True)
+            self.assertEqual(profile.stat().st_mode & 0o777, 0o600)
+            after = subprocess.run(command+['-o', str(self.output), '--',
+                                            str(self.stage/'.buildResult')], env=self.env,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, timeout=30, text=True)
+            self.assertEqual(after.returncode, 0, after.stdout)
+            packages = list(self.output.glob('*.wgt'))
+            self.assertEqual(len(packages), 1)
+            subprocess.run([sys.executable, str(ROOT/'scripts/verify-wgt.py'),
+                            str(packages[0]), '9.8.7', '--jdk', str(self.sdk/'jdk'),
+                            '--allow-sdk-distributor'], env=self.env, check=True)
+        finally:
+            subprocess.run([tizen, 'cli-config', 'profiles.path='+original], env=self.env,
+                           check=True, stdout=subprocess.DEVNULL)
 
     def test_configured_certificates_keep_strict_policy(self):
         encoded = base64.b64encode(self.public.read_bytes()).decode()

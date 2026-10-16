@@ -59,12 +59,9 @@ fi
 "$tizen_bin" security-profiles add -f -n "$TIZEN_PROFILE_NAME" \
   -a "$sign_dir/author.p12" -p "$TIZEN_CERT_PASSWORD" \
   -d "$sign_dir/distributor.p12" -dp "$TIZEN_DISTRIBUTOR_PASSWORD"
-# This old CLI can return zero even when profile creation/signing failed.
-python3 - "$sign_dir/profiles.xml" "$TIZEN_PROFILE_NAME" <<'PY'
-import sys,xml.etree.ElementTree as ET
-if not any(profile.get('name')==sys.argv[2] for profile in ET.parse(sys.argv[1]).getroot()):
- raise SystemExit('Signing profile creation failed')
-PY
+# This old CLI can return zero even when profile creation failed. Validate it
+# and replace desktop-keyring password references in this private temp file.
+python3 "$GITHUB_WORKSPACE/scripts/prepare-signing-profile.py" "$sign_dir/profiles.xml" "$TIZEN_PROFILE_NAME"
 "$tizen_bin" build-web -- "$stage_dir"
 test -d "$stage_dir/.buildResult"
 python3 "$GITHUB_WORKSPACE/scripts/sign-wgt.py" "$tizen_bin" "$stage_dir/.buildResult" "$output_dir" "$TIZEN_PROFILE_NAME"
