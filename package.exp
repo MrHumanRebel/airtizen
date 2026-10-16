@@ -12,6 +12,8 @@ proc getenv {name default} {
 set workspace [getenv GITHUB_WORKSPACE [pwd]]
 set profile [getenv TIZEN_PROFILE_NAME "AirTizen"]
 set password [getenv TIZEN_CERT_PASSWORD ""]
+set distributor_password [getenv TIZEN_DISTRIBUTOR_PASSWORD ""]
+log_user 0
 
 if {$password eq ""} {
   puts "Error: TIZEN_CERT_PASSWORD is not set"
@@ -19,8 +21,8 @@ if {$password eq ""} {
 }
 
 set tizen_bin "$workspace/tizen-studio/tools/ide/bin/tizen"
-set build_dir "$workspace/app/.buildResult"
-set release_dir "$workspace/app/release"
+set build_dir [getenv AIRTIZEN_BUILD_DIR "$workspace/app/.buildResult"]
+set release_dir [getenv AIRTIZEN_RELEASE_DIR "$workspace/app/release"]
 
 if {![file executable $tizen_bin]} {
   puts "Error: Tizen CLI not found or not executable: $tizen_bin"
@@ -46,7 +48,7 @@ expect {
     exp_continue
   }
   "Distributor password:" {
-    send -- "$password\r"
+    send -- "$distributor_password\r"
     exp_continue
   }
   "Certificate password:" {

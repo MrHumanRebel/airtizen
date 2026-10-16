@@ -46,6 +46,7 @@ fairplay_setup(fairplay_t *fp, const unsigned char req[16], unsigned char res[14
     }
 
     mode = req[14];
+    if (mode < 0 || mode >= 4) return -1; /* Untrusted packet indexes the reply table. */
     memcpy(res, reply_message[mode], 142);
     fp->keymsglen = 0;
     return 0;

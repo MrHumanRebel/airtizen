@@ -6,3 +6,6 @@ tizen-studio/
 tizen-studio-data/
 *.wgt
 .DS_Store
+
+__pycache__/
+*.pyc

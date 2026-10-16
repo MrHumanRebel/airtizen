@@ -1,0 +1,2 @@
+cryptography==45.0.7
+playwright==1.55.0

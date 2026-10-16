@@ -31,6 +31,8 @@ raop_rtp_t *raop_rtp_init(logger_t *logger, raop_callbacks_t *callbacks, const u
                           const char* remoteName, const char* remoteDeviceId,
                           const unsigned char *aeskey, const unsigned char *aesiv, const unsigned char *ecdh_secret, unsigned short timing_rport);
 
+int raop_rtp_configure_audio(raop_rtp_t *rtp, unsigned ct, unsigned frames, unsigned rate, unsigned channels);
+
 void raop_rtp_start_audio(raop_rtp_t *raop_rtp, int use_udp, unsigned short control_rport, unsigned short timing_rport,
                      unsigned short *control_lport, unsigned short *timing_lport, unsigned short *data_lport);
 

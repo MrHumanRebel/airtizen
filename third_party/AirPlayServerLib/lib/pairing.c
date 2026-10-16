@@ -139,7 +139,7 @@ int
 pairing_session_check_handshake_status(pairing_session_t *session)
 {
     assert(session);
-    if (session->status != STATUS_SETUP) {
+    if (session->status != STATUS_SETUP && session->status != STATUS_HANDSHAKE) {
         return -1;
     }
     return 0;

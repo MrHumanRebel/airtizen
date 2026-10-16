@@ -34,6 +34,9 @@ typedef struct raop_s raop_t;
 typedef void (*raop_log_callback_t)(void *cls, int level, const char *msg);
 
 struct raop_callbacks_s {
+    void (*pairing_verified)(void *cls);
+    void (*audio_format)(void *cls, unsigned compression_type);
+    void (*video_flush)(void *cls);
 	void* cls;
 
 	void (*connected)(void* cls, const char* remoteName, const char* remoteDeviceId);

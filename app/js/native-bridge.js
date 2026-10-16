@@ -50,13 +50,16 @@
         cb({ ok:false, error:'runtime HTTP ' + xhr.status });
         return;
       }
-      try { cb(JSON.parse(xhr.responseText || '{}')); }
-      catch (ex) { cb({ ok:false, error:'invalid runtime JSON: ' + ex.message }); }
+      var parsed;
+      try { parsed = JSON.parse(xhr.responseText || '{}'); }
+      catch (ex) { cb({ ok:false, error:'invalid runtime JSON: ' + ex.message }); return; }
+      cb(parsed);
     };
 
     try {
       xhr.open(method, runtimeBase + path, true);
       xhr.setRequestHeader('Accept', 'application/json');
+      if (method === 'POST') xhr.setRequestHeader('X-AirTizen-Control', '1');
       if (payload) xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.send(payload ? JSON.stringify(payload) : null);
     } catch (ex2) {
@@ -67,6 +70,7 @@
   }
 
   function NativeBridge(){
+    this.remoteLogs = [];
     this.runtimeReachable = false;
     this.lastStatus = copyStatus({
       mdns: 'checking',
@@ -79,15 +83,17 @@
 
   NativeBridge.prototype.applyRuntimeResult = function(res, source){
     if (res && res.ok && res.status) {
+      this.lastFailure = null;
       this.runtimeReachable = true;
       this.lastStatus = copyStatus(res.status);
+      if (res.logs && res.logs instanceof Array) this.remoteLogs = res.logs.slice(-32);
       if (res.log) {
         var remoteLines = String(res.log).split('\n');
         for (var i=0; i<remoteLines.length; i++) {
           if (remoteLines[i]) log('[runtime] ' + remoteLines[i]);
         }
       }
-      return { ok:true, status:this.lastStatus, service:res.service || "running", protocols:res.protocols || {} };
+      return { ok:true, status:this.lastStatus, service:res.service || "running", protocols:res.protocols || {}, nowPlaying:res.nowPlaying || {}, capabilities:res.capabilities || {}, audio:res.audio || {}, video:res.video || {}, receiverName:res.receiverName || "AirTizen TV" };
     }
 
     this.runtimeReachable = false;
@@ -97,18 +103,28 @@
       pair: 'idle',
       audio: 'idle',
       connected: false,
-      detail: 'No AirTizen native/service runtime answered on 127.0.0.1:45110. The WGT web UI alone cannot publish Bonjour/mDNS or run the RAOP receiver.'
+      detail: 'The receiver service is unavailable. Check that the AirTizen service is installed and running.'
     });
-    if (res && res.error) log(source + ' failed: ' + res.error);
+    var failure = res && res.error ? res.error : 'runtime unavailable';
+    if (this.lastFailure !== failure) log(source + ' failed: ' + failure);
+    this.lastFailure = failure;
     return { ok:false, status:this.lastStatus, error:res && res.error ? res.error : 'runtime unavailable' };
   };
 
   NativeBridge.prototype.start = function(cb){
     var self = this;
     log('start requested');
-    xhrJson('POST', '/start', { name:'AirTizen TV' }, function(res){
+    xhrJson('POST', '/start', null, function(res){
       var result = self.applyRuntimeResult(res, 'start');
       if (cb) cb(result);
+    });
+  };
+
+  NativeBridge.prototype.stop = function(cb){
+    var self = this;
+    log('stop requested');
+    xhrJson('POST', '/stop', null, function(res){
+      if (cb) cb(self.applyRuntimeResult(res, 'stop'));
     });
   };
 
@@ -116,7 +132,7 @@
     var self = this;
     xhrJson('GET', '/status', null, function(res){
       var result = self.applyRuntimeResult(res, 'status');
-      result.log = logLines.join('\n');
+      result.log = (self.remoteLogs || []).concat(logLines).join('\n');
       if (cb) cb(result);
     });
   };
