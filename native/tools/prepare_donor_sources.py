@@ -72,7 +72,7 @@ handlers = handlers.replace('raop_rtp_start_audio(conn->raop_rtp, use_udp, remot
 write("raop_handlers.generated.h", handlers)
 
 raop = read("raop.c").replace('"raop_handlers.h"', '"raop_handlers.generated.h"')
-raop = raop.replace('struct raop_conn_s {', 'struct raop_conn_s {\n    int reverse, event_waiting, event_state;\n    unsigned event_generation;\n    uint64_t event_time;\n    char event_session[65];')
+raop = raop.replace('struct raop_conn_s {', 'struct raop_conn_s {\n    int photo_seen;\n    unsigned photo_session;\n    int reverse, event_waiting, event_state;\n    unsigned event_generation;\n    uint64_t event_time;\n    char event_session[65];')
 raop = raop.replace('#include "raop_handlers.generated.h"', '#include "raop_handlers.generated.h"\n#include "airtizen_raop_guard.h"\n#include "airtizen_airplay_http.h"\n#include "airtizen_reverse.h"')
 raop = raop.replace('if (!method || !cseq) {', 'if (conn->reverse) { if (!url) conn->event_waiting=0; else conn->reverse=-1; return; }\n    if (airtizen_reverse_upgrade(conn, request, response)) return;\n    if (airtizen_airplay_http(request, response)) return;\n    if (method && url && !cseq) { airtizen_http_reply(response, 404, NULL, NULL, 0); return; }\n\tif (!method || !url || !cseq) {')
 raop = raop.replace('*response = http_response_init("RTSP/1.0", 200, "OK");', """int validation = airtizen_validate_request(conn, request);
@@ -117,6 +117,9 @@ buffer = buffer[:start] + """    entry->audio_buffer_len=(int)(raop_buffer->code
     entry->channels=(uint16_t)raop_buffer->configured_channels;entry->bits_per_sample=16;
 """ + buffer[end:]
 buffer = buffer.replace('/* Update the raop_buffer seqnums */', 'if (!entry->audio_buffer_len) { free(packetbuf);entry->available=0;return 0; }\n    /* Update the raop_buffer seqnums */')
+start = buffer.index('raop_buffer_flush(raop_buffer_t *raop_buffer, int next_seq)')
+assertion = buffer.index('assert(raop_buffer);', start) + len('assert(raop_buffer);')
+buffer = buffer[:assertion] + '\n    airtizen_aac_flush(raop_buffer->phandle);airtizen_alac_flush(raop_buffer->alac);' + buffer[assertion:]
 buffer += """
 int raop_buffer_configure_audio(raop_buffer_t *buffer,unsigned ct,unsigned frames,unsigned rate,unsigned channels) {
     airtizen_alac *alac=NULL;airtizen_aac *aac=NULL;

@@ -6,7 +6,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-struct airtizen_aac {AVCodecContext *context;AVFrame *frame;unsigned rate,channels,frames;};
+struct airtizen_aac {AVCodecContext *context;AVFrame *frame;unsigned type,rate,channels,frames;};
 airtizen_aac *airtizen_aac_create(unsigned type,unsigned rate,unsigned channels,unsigned frames) {
     airtizen_aac *d;const AVCodec *codec;uint8_t config[4]={0xf8,0xe8,0x50,0};unsigned length=4;
     if(channels!=2 || (rate!=44100 && rate!=48000))return NULL;
@@ -20,16 +20,24 @@ airtizen_aac *airtizen_aac_create(unsigned type,unsigned rate,unsigned channels,
     memcpy(d->context->extradata,config,length);d->context->extradata_size=(int)length;
     d->context->sample_rate=(int)rate;d->context->thread_count=1;
     av_channel_layout_default(&d->context->ch_layout,(int)channels);
-    d->rate=rate;d->channels=channels;d->frames=frames;
+    d->type=type;d->rate=rate;d->channels=channels;d->frames=frames;
     if(avcodec_open2(d->context,codec,NULL)<0)goto failed;
     return d;
 failed:airtizen_aac_destroy(d);return NULL;
 }
 void airtizen_aac_destroy(airtizen_aac *d){if(!d)return;av_frame_free(&d->frame);avcodec_free_context(&d->context);free(d);}
-void airtizen_aac_flush(airtizen_aac *d){if(d){avcodec_flush_buffers(d->context);av_frame_unref(d->frame);}}
+void airtizen_aac_flush(airtizen_aac *d){
+    airtizen_aac *fresh;
+    if(!d)return;
+    /* FFmpeg flush clears overlap samples but retains other AAC/PNS state.
+     * Re-open the negotiated decoder so a new RTP segment has fresh state. */
+    fresh=airtizen_aac_create(d->type,d->rate,d->channels,d->frames);
+    avcodec_free_context(&d->context);av_frame_free(&d->frame);
+    if(fresh){d->context=fresh->context;d->frame=fresh->frame;free(fresh);}
+}
 size_t airtizen_aac_decode(airtizen_aac *d,const uint8_t *data,size_t size,int16_t *pcm,size_t capacity) {
     AVPacket *packet;AVFrame *frame;int result;size_t bytes,i;unsigned channel;
-    if(!d || !data || !pcm || !size || size>32768)return 0;
+    if(!d || !d->context || !d->frame || !data || !pcm || !size || size>32768)return 0;
     packet=av_packet_alloc();if(!packet)return 0;
     if(av_new_packet(packet,(int)size)<0){av_packet_free(&packet);return 0;}
     memcpy(packet->data,data,size);result=avcodec_send_packet(d->context,packet);av_packet_free(&packet);if(result<0)return 0;

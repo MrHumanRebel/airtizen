@@ -72,6 +72,10 @@
         global.AirTizenShare.update(result && result.playback);
         if (global.AirTizenShare.isActive()) { if (active || generation !== -1) dispose(); schedule(100); return; }
       }
+      if (global.AirTizenPhoto) {
+        global.AirTizenPhoto.update(result && result.photo);
+        if (global.AirTizenPhoto.isActive()) { if (active || generation !== -1) dispose(); schedule(100); return; }
+      }
       var state = result && result.video;
       if (!state || !state.available) { if (active || generation !== -1) dispose(); schedule(200); return; }
       if (state.generation !== generation) { begin(state); return; }
@@ -89,9 +93,10 @@
       video = document.getElementById('mirror-video'); overlay = document.getElementById('video-overlay');
       video.addEventListener('error', function () { if (generation !== -1) failed('Video decoder error'); });
       if (global.AirTizenShare) global.AirTizenShare.start();
+      if (global.AirTizenPhoto) global.AirTizenPhoto.start();
       schedule(0);
     },
     stop: dispose,
-    isActive: function () { return active || !!(global.AirTizenShare && global.AirTizenShare.isActive()); }
+    isActive: function () { return active || !!(global.AirTizenPhoto && global.AirTizenPhoto.isActive()) || !!(global.AirTizenShare && global.AirTizenShare.isActive()); }
   };
 })(window);

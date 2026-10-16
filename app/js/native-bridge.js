@@ -103,7 +103,7 @@
       pair: 'idle',
       audio: 'idle',
       connected: false,
-      detail: 'The receiver service is unavailable. Check that the AirTizen service is installed and running.'
+      detail: 'The receiver service is unavailable. Check the bundled receiver loader and network status in diagnostics.'
     });
     var failure = res && res.error ? res.error : 'runtime unavailable';
     if (this.lastFailure !== failure) log(source + ' failed: ' + failure);

@@ -14,6 +14,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <assert.h>
 
 #include "http_request.h"
@@ -116,7 +117,8 @@ on_body(http_parser *parser, const char *at, size_t length)
 	http_request_t *request = parser->data;
 
 	/* Bound unauthenticated request bodies before allocating (AirTizen). */
-	if (length > 1024 * 1024 || request->datalen > 1024 * 1024 - length) return -1;
+	size_t limit = request->parser.method == HTTP_PUT && request->url && !strcmp(request->url, "/photo") ? 8U * 1024U * 1024U : 1024U * 1024U;
+	if (length > limit || (size_t)request->datalen > limit - length) return -1;
 
 	request->data = realloc(request->data, request->datalen+length);
 	assert(request->data);
@@ -236,7 +238,7 @@ http_request_get_header(http_request_t *request, const char *name)
 	assert(request);
 
 	for (i=0; i<request->headers_size; i+=2) {
-		if (!strcmp(request->headers[i], name)) {
+		if (!strcasecmp(request->headers[i], name)) {
 			return request->headers[i+1];
 		}
 	}

@@ -2,6 +2,7 @@
 #include "airtizen_runtime.h"
 #include "airtizen_video.h"
 #include "airtizen_playback.h"
+#include "airtizen_photo.h"
 #include "airtizen_metadata.h"
 #include <math.h>
 #include <arpa/inet.h>
@@ -65,6 +66,7 @@ static void handle_client(int fd) {
     size_t used = 0;
     int control = 0, host = 0, origin = 0, length_seen = 0;
     int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0,report_ended=0;
+    int photo=0,photo_report=0,photo_failed=0;unsigned photo_generation=0;
     int artwork=0;unsigned artwork_version=0;
     int media_init=0,media_segment=0;uint64_t media_sequence=0;
     struct timeval timeout = {1, 0};
@@ -98,6 +100,8 @@ static void handle_client(int fd) {
         playback_report=playback_report && (report_ready==0 || report_ready==1) && (report_failed==0 || report_failed==1) && (report_ended==0 || report_ended==1);
     }
     { int parsed=0;artwork=sscanf(path,"/artwork/%u%n",&artwork_version,&parsed)==1 && !path[parsed]; }
+    {int parsed=0;photo=sscanf(path,"/photo/%u%n",&photo_generation,&parsed)==1 && !path[parsed];}
+    {int parsed=0;photo_report=sscanf(path,"/photo/report?generation=%u&failed=%d%n",&photo_generation,&photo_failed,&parsed)==2 && !path[parsed] && (photo_failed==0 || photo_failed==1);}
     media_init=!strcmp(path,"/video/init");
     if(!strncmp(path,"/video/segment/",15)) {
         const char *digit=path+15;char *tail;
@@ -128,10 +132,20 @@ static void handle_client(int fd) {
         } else if (!strcasecmp(line, "Transfer-Encoding")) { respond(fd, "400 Bad Request", "{\"ok\":false}"); return; }
     }
     if (!host) { respond(fd, "400 Bad Request", "{\"ok\":false,\"error\":\"missing_host\"}"); return; }
-    if (!artwork && !playback_report && !media_init && !media_segment && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
+    if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
         respond(fd, "404 Not Found", "{\"ok\":false,\"error\":\"not_found\"}"); return;
     }
     if (!strcmp(method, "OPTIONS")) { respond(fd, "204 No Content", ""); return; }
+    if(!strcmp(method,"GET") && photo){
+        uint8_t *body=NULL;char mime[16];size_t size=airtizen_photo_copy(photo_generation,&body,mime);
+        if(size)respond_bytes(fd,"200 OK",mime,body,size,photo_generation);else respond(fd,"404 Not Found","{\"ok\":false}");
+        free(body);return;
+    }
+    if(!strcmp(method,"POST") && photo_report){
+        if(!control){respond(fd,"403 Forbidden","{\"ok\":false}");return;}
+        if(airtizen_photo_report(photo_generation,photo_failed)==0)respond(fd,"200 OK","{\"ok\":true}");else respond(fd,"409 Conflict","{\"ok\":false}");
+        return;
+    }
     if(!strcmp(method,"GET") && artwork){
         uint8_t *body=NULL;char mime[16];size_t size=airtizen_metadata_copy_artwork(artwork_version,&body,mime);
         if(size)respond_bytes(fd,"200 OK",mime,body,size,artwork_version);

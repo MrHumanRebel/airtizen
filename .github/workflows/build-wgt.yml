@@ -32,6 +32,8 @@ jobs:
           ./scripts/build-local.sh
           ctest --test-dir native/build --output-on-failure
           python3 tests/test_release.py
+          node --check app/js/photo.js
+          npx --yes acorn@8.15.0 --ecma5 app/js/photo.js > /dev/null
           node --check app/js/embedded-receiver.js
           npx --yes acorn@8.15.0 --ecma5 app/js/embedded-receiver.js > /dev/null
           node --check app/js/share.js
@@ -53,6 +55,7 @@ jobs:
           python3 tests/test_gui.py
           python3 tests/test_mirror_gui.py
           python3 tests/test_share_gui.py
+          python3 tests/test_photo_gui.py
       - name: Address and undefined behavior sanitizers
         run: |
           set -euo pipefail

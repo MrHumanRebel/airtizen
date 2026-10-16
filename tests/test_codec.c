@@ -20,7 +20,7 @@ static void exercise(unsigned ct) {
     raop_callbacks_t cb={0};
     INT_PCM input[2048];
     unsigned char encoded[4096], packet[4108];
-    int frame, decoded_frames=0;
+    int frame, decoded_frames=0,last_encoded_size=0;
     long long energy=0;
     assert(aacEncOpen(&encoder,0,2)==AACENC_OK);
     assert(aacEncoder_SetParam(encoder,AACENC_AOT,ct==4?AOT_AAC_LC:AOT_ER_AAC_ELD)==AACENC_OK);
@@ -52,6 +52,7 @@ static void exercise(unsigned ct) {
         inargs.numInSamples=samples*2;
         assert(aacEncEncode(encoder,&in,&out,&inargs,&outargs)==AACENC_OK);
         if(!outargs.numOutBytes) continue;
+        last_encoded_size=outargs.numOutBytes;
         memset(packet,0,12);packet[0]=0x80;packet[1]=0x60;packet[3]=(unsigned char)frame;
         encrypted=outargs.numOutBytes/16*16;
         AES_set_key(&aes,derived,iv,AES_MODE_128);
@@ -66,6 +67,19 @@ static void exercise(unsigned ct) {
         decoded_frames++;
     }
     assert(decoded_frames>=8 && energy>1000000);
+    /* FLUSH must reset codec prediction/overlap, matching a fresh receiver. */
+    {
+        raop_buffer_t *fresh=raop_buffer_init(logger,key,iv,secret);
+        const void *a,*b;int length_a=0,length_b=0;uint32_t rate=0,pts=0;uint16_t channels=0,bits=0;
+        assert(fresh && raop_buffer_configure_audio(fresh,ct,(unsigned)samples,44100,2)==0);
+        raop_buffer_flush(buffer,-1);packet[3]=30;
+        assert(raop_buffer_queue(buffer,packet,(unsigned short)(12+last_encoded_size),&cb)>=0);
+        a=raop_buffer_dequeue(buffer,&length_a,&pts,1,&rate,&channels,&bits);
+        assert(raop_buffer_queue(fresh,packet,(unsigned short)(12+last_encoded_size),&cb)>=0);
+        b=raop_buffer_dequeue(fresh,&length_b,&pts,1,&rate,&channels,&bits);
+        assert(a && b && length_a==samples*4 && length_b==length_a && !memcmp(a,b,(size_t)length_a));
+        raop_buffer_destroy(fresh);
+    }
     /* Invalid AAC must never become a successfully decoded PCM frame. */
     raop_buffer_flush(buffer,-1);
     memset(packet,0,sizeof(packet)); packet[0]=0x80;packet[1]=0x60;packet[3]=20;

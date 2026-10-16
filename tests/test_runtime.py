@@ -212,7 +212,7 @@ class Runtime(unittest.TestCase):
         self.assertEqual(info['model'],'AirTizen1,1')
         self.assertEqual(len(info['pk']),32)
         self.assertNotEqual(info['deviceID'],'A1:B2:C3:D4:E5:F6')
-        self.assertEqual(info['features'],0x48038381)
+        self.assertEqual(info['features'],0x4803a383)
         self.assertEqual({entry['type'] for entry in info['audioFormats']},{100,101})
         self.assertTrue(all(entry['audioOutputFormats']==0x1d40000 for entry in info['audioFormats']))
 

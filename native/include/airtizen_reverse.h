@@ -4,7 +4,7 @@
 static uint64_t airtizen_event_clock(void){return now_us()/1000000ULL;}
 static int airtizen_reverse_upgrade(raop_conn_t *conn,http_request_t *request,http_response_t **response){
     const char *method=http_request_get_method(request),*url=http_request_get_url(request),*session;
-    airtizen_playback_state playback;
+    airtizen_playback_state playback;airtizen_photo_state photo;
     if(!method || !url || strcmp(method,"POST") || strcmp(url,"/reverse"))return 0;
     session=http_request_get_header(request,"X-Apple-Session-ID");
     if(session){size_t i,length=strlen(session);if(length>64)return 0;for(i=0;i<length;++i)if(!isalnum((unsigned char)session[i]) && session[i]!='-')return 0;snprintf(conn->event_session,sizeof(conn->event_session),"%s",session);}
@@ -12,18 +12,26 @@ static int airtizen_reverse_upgrade(raop_conn_t *conn,http_request_t *request,ht
     http_response_add_header(*response,"Upgrade","PTTH/1.0");http_response_add_header(*response,"Connection","Upgrade");
     http_response_add_header(*response,"Content-Length","0");http_response_finish(*response,NULL,0);
     airtizen_playback_snapshot(&playback);conn->reverse=1;conn->event_generation=playback.generation;conn->event_state=playback.active?-1:0;
+    airtizen_photo_snapshot(&photo);
+    if(photo.active && !photo.failed && !strcmp(photo.session,conn->event_session)){conn->photo_seen=1;conn->photo_session=photo.session_id;}
     return 1;
 }
 static int airtizen_reverse_poll(void *opaque,http_response_t **event){
     raop_conn_t *conn=opaque;airtizen_playback_state playback;int state;const char *name;
+    airtizen_photo_state photo;int photo_stopped=0;
     plist_t info;char *encoded=NULL;uint32_t length=0;
     if(conn->reverse<0)return -1;if(!conn->reverse)return 0;
     if(conn->event_waiting)return airtizen_event_clock()-conn->event_time>10?-1:0;
     airtizen_playback_snapshot(&playback);
+    airtizen_photo_snapshot(&photo);
+    if(photo.active && !photo.failed && !strcmp(photo.session,conn->event_session)){
+        conn->photo_seen=1;conn->photo_session=photo.session_id;return 0;
+    }
+    if(conn->photo_seen){photo_stopped=1;conn->photo_seen=0;}
     state=!playback.active || playback.failed?0:!playback.ready?1:playback.rate==0?2:3;
-    if(state==conn->event_state && playback.generation==conn->event_generation)return 0;
+    if(!photo_stopped && state==conn->event_state && playback.generation==conn->event_generation)return 0;
     name=state==0?"stopped":state==1?"loading":state==2?"paused":"playing";
-    info=plist_new_dict();plist_dict_set_item(info,"category",plist_new_string("video"));plist_dict_set_item(info,"state",plist_new_string(name));
+    info=plist_new_dict();plist_dict_set_item(info,"category",plist_new_string(photo_stopped?"photo":"video"));if(photo_stopped)plist_dict_set_item(info,"sessionID",plist_new_uint(conn->photo_session));plist_dict_set_item(info,"state",plist_new_string(photo_stopped?"stopped":name));
     plist_to_xml(info,&encoded,&length);plist_free(info);
     *event=http_response_init_request("POST","/event");if(!*event){free(encoded);return -1;}
     http_response_add_header(*event,"Content-Type","text/x-apple-plist+xml");
