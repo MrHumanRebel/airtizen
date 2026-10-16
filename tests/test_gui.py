@@ -5,13 +5,12 @@ import http.server
 import threading
 import json
 from pathlib import Path
-import os
-import shutil
 import subprocess
 import tempfile
 import time
 import unittest
 import urllib.request
+from browser_support import launch_browser
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +35,7 @@ class GUI(unittest.TestCase):
         cls.server_thread = threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.server_thread.start()
         cls.playwright = sync_playwright().start()
-        cls.browser = cls.playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE') or shutil.which('chromium'),headless=True,args=['--no-sandbox'])
+        cls.browser = launch_browser(cls.playwright)
 
     @classmethod
     def tearDownClass(cls):

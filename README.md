@@ -13,13 +13,16 @@ python3 -m pip install -r requirements-dev.txt
 ./scripts/build-local.sh
 ctest --test-dir native/build --output-on-failure
 python3 tests/test_release.py
-python3 -m playwright install chromium
+python3 -m playwright install --with-deps chrome
+export CHROMIUM_CHANNEL=chrome
 python3 tests/test_gui.py
 python3 tests/test_mirror_gui.py
 python3 tests/test_share_gui.py
 ```
 
 The seven CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
+
+Media tests require H.264/AAC support. CI explicitly selects branded Chrome: Playwright’s bundled Chromium may lack these codecs. Alternatively set `CHROMIUM_EXECUTABLE` to a codec-enabled system browser; it takes precedence over `CHROMIUM_CHANNEL`. Missing codecs fail a preflight check and do not skip playback assertions.
 
 For manual development:
 

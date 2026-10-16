@@ -3,9 +3,7 @@
 import functools
 import http.server
 import json
-import os
 from pathlib import Path
-import shutil
 import socket
 import subprocess
 import tempfile
@@ -13,6 +11,7 @@ import threading
 import time
 import unittest
 import urllib.request
+from browser_support import launch_browser, require_media_support
 from playwright.sync_api import sync_playwright,expect
 ROOT=Path(__file__).resolve().parents[1]
 class Mirroring(unittest.TestCase):
@@ -39,8 +38,9 @@ class Mirroring(unittest.TestCase):
                 self.assertIn(b'ftyp',response.read())
                 self.assertEqual(int(response.headers['X-AirTizen-Generation']),state['video']['generation'])
             with sync_playwright() as playwright:
-                browser=playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE') or shutil.which('chromium'),headless=True,args=['--no-sandbox'])
+                browser=launch_browser(playwright)
                 page=browser.new_page(viewport={'width':1920,'height':1080})
+                require_media_support(page, mse_mime=state['video']['mime'])
                 errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
                 page.set_content('<style>body{margin:0}</style><iframe name="tv" sandbox="allow-scripts" style="width:1920px;height:1080px;border:0" src="http://127.0.0.1:'+str(server.server_port)+'/index.html"></iframe>')
                 ui=page.frame(name='tv');video=ui.locator('#mirror-video')
