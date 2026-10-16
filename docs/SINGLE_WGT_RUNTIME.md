@@ -1,6 +1,6 @@
 # Single-WGT receiver for UE65MU6100 / Tizen 3.0
 
-The requested product is a receiver installed entirely through WGT packages. A web UI that depends on an unavailable native TPK does not meet that requirement. The proposed replacement is a native NaCl module inside the same signed WGT as the UI. This document records the researched port target; it is not an implemented or production-validated receiver.
+The requested product is a receiver installed entirely through WGT packages. A web UI that depends on an unavailable native TPK does not meet that requirement. The implemented replacement is a native NaCl module inside the same signed WGT as the UI. This document records the implemented port and its remaining device-validation gates.
 
 ## Confirmed platform route
 
@@ -18,29 +18,26 @@ Sources inspected on 2026-10-16:
 - [PPAPI permissions and Tizen privileges](https://developer.samsung.com/smarttv/develop/extension-libraries/nacl/managing-nacl-projects/adding-privileges-and-permissions.html)
 - [Samsung web-engine versions](https://developer.samsung.com/smarttv/develop/specifications/web-engine-specifications.html)
 
-## Required implementation
+## Implemented package and build
 
-The intended WGT contains the existing UI plus an `.nmf` and the target architecture's complete `.nexe`, including receiver code and linked codecs. A normal native Linux/Tizen executable cannot be renamed to `.nexe`; it must be compiled for the NaCl sandbox ABI and pass its loader validation. A TPK placed inside a ZIP/WGT does not install or launch itself.
+The WGT now contains the UI, a generated ARM `.nmf`, and the actual native `.nexe`. It is cross-compiled using the official Pepper 47 LLVM toolchain and passes the SDK's `ncval` sandbox validator before and after stripping debug data. The ELF structural/package checks reject host executables, missing modules and external module URLs. This validates build/package integrity, not device execution.
 
-1. Cross-build the protocol/crypto/codec core with the Samsung toolchain. Validate compiler support for the pinned FFmpeg dependency and produce NaCl-compatible static libraries; host `.a` files cannot be reused.
-2. Add a `pp::Module` / `pp::Instance` entry point and initialize `nacl_io` before starting receiver threads. Start/stop the actual receiver from module lifecycle callbacks, reporting loader and bind failures to the GUI.
-3. Adapt network identity and interface discovery; Linux `getifaddrs`/MAC ioctls cannot be assumed inside the sandbox. Verify TCP listen/accept, UDP receive, retransmission, multicast membership and shutdown against the Samsung interfaces.
-4. Replace the host audio stub/Tizen service audio boundary with a real PPAPI audio callback and bounded PCM buffering. Implement coordinated sender-clock audio/video playout; independent MSE video and native audio playback are insufficient for synchronized mirroring.
-5. Validate the existing MSE renderer against the TV. If it cannot sustain the stream, implement the appropriate NaCl hardware decoder/player integration. Verify resolution changes, rotation, decoder reset and memory limits.
-6. Load the bundled module from the UI, declare the actual PPAPI permissions and corresponding Tizen privileges, and update the CSP deliberately. The current `object-src 'none'` prevents this load.
-7. Stage and verify the complete manifest/module/library assets before signing. Only a package containing and starting the real receiver may be called standalone. Current signing tests establish package integrity, not native module execution.
-8. Install that WGT on the target TV and test discovery, real iPhone pairing, ALAC/AAC music, screen sharing with audio, URL media controls, reconnect, standby and sustained playback. Full AirPlay 2/multiroom, photos and protected media remain separate missing capabilities.
+The module initializes `nacl_io`, starts the receiver/control server from a worker thread, and uses PPAPI Audio with a bounded PCM queue. TV `systeminfo` supplies the LAN address; a stable local receiver identifier replaces Linux interface/MAC ioctls. The TV manifest uses `tv-samsung` and the documented public-network privilege. HTTP readiness waits and UDP timing-thread shutdown avoid reliance on socket timeouts missing from this SDK.
 
-The existing separately installed native-service route remains an experiment, not a prerequisite the end user is expected to solve for this product. No companion PC/relay is assumed for the requested standalone product.
+FFmpeg supplies AAC-LC/AAC-ELD and ALAC decoding; FDK is used only as an independent host-test encoder and is not linked into the production module. The existing encrypted H.264-to-fMP4 path feeds the browser MSE renderer. Native PCM and MSE video are not yet driven by one playout clock.
 
-## Current external blocker
+```bash
+# Linux x86-64: build-essential, CMake 3.19–3.x, pkg-config, curl, unzip, xz-utils, Python 3
+bash scripts/build-nacl-receiver.sh
+python3 tests/test_embedded_package.py ../.airtizen-deps/receiver-nacl-build/airtizen_receiver.nexe
+python3 scripts/stage-web.py /tmp/airtizen-web "$(python3 scripts/version.py)" \
+  --receiver ../.airtizen-deps/receiver-nacl-build/airtizen_receiver.nexe
+```
 
-The official Pepper 47 download is linked by Samsung at:
+The scripts cache downloads outside the checkout, verify fixed SHA-256 values, and build an isolated Python 2.7.18 solely for the old SDK driver. Python 3 remains the application/test interpreter. The Samsung SDK archive hash is `c6fe7bfbc1bf0981d018bea47e62574a9c7575d1b102281a8f728e00a09bab2e`; its official download URL is `https://developer.samsung.com/smarttv/file/b7e3cb3a-9b3d-4651-9404-3980dac50cdf`. No TLS/checksum bypass is used. The previous CloudFront network block has been resolved.
 
-`https://developer.samsung.com/smarttv/file/b7e3cb3a-9b3d-4651-9404-3980dac50cdf`
+PRs cross-build/test the native payload without signing secrets. Main builds download that exact payload, sign it, verify all payload digests and both RSA signatures, require the embedded module, and publish checksums and source archives. GUI-only packages cannot pass the release check. License texts ship inside the WGT; corresponding receiver, FFmpeg and NaCl runtime sources accompany release assets.
 
-It redirects to `d13643hualop71.cloudfront.net`. The cloud environment rejects the redirected request with HTTP 403, `Domain forbidden`. A supported network-permission request was granted, but the configured outbound domain policy still rejects the request. The required domain addition has been saved in the environment configuration draft and needs to be applied/published in environment settings. No SDK payload was downloaded or used; checksums, signatures and TLS have not been bypassed.
+## Outstanding production acceptance
 
-`api.github.com` has also been added to the draft for PR operations; Git HTTPS push works while GitHub API requests currently return `Forbidden`. Applying a network draft enables a retry, not a guarantee that API authorization will succeed.
-
-After the network change is applied, retrieve the official toolchain, establish artifact integrity/provenance, inspect its headers/libraries and run the port build. Until that succeeds and device behavior is verified, there is no production standalone AirTizen WGT to publish.
+Install the single WGT on UE65MU6100 and establish NaCl startup, multicast discovery, current iPhone connection, audible music, mirroring frames, URL playback and lifecycle recovery. Then implement and validate coordinated audio/video playout, authorization/session ownership and sustained resource limits. AirPlay 2 multiroom, photos and DRM are not implemented. See [the acceptance matrix](PRODUCTION_READINESS.md). Neither desktop Chrome bootstrap tests nor `ncval` execute the native module on a Samsung TV.

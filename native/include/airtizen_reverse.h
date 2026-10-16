@@ -1,6 +1,7 @@
 /* Bounded PTTH playback event channel; included with the private RAOP connection type. */
 #include <time.h>
-static uint64_t airtizen_event_clock(void){struct timespec now;clock_gettime(CLOCK_MONOTONIC,&now);return (uint64_t)now.tv_sec;}
+#include "byteutils.h"
+static uint64_t airtizen_event_clock(void){return now_us()/1000000ULL;}
 static int airtizen_reverse_upgrade(raop_conn_t *conn,http_request_t *request,http_response_t **response){
     const char *method=http_request_get_method(request),*url=http_request_get_url(request),*session;
     airtizen_playback_state playback;

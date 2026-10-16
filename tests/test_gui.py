@@ -92,6 +92,34 @@ class GUI(unittest.TestCase):
             self.assertLessEqual(box['y']+box['height'],1080)
         self.page.screenshot(path='/tmp/airtizen-ui.png')
 
+    def test_embedded_module_uses_tv_network(self):
+        self.context.add_init_script("""window.tizen={systeminfo:{getPropertyValue:function(name,ok,error){
+            if(name==='ETHERNET_NETWORK')ok({ipAddress:'192.0.2.20'});
+            else error({message:'inactive'});
+        }}};""")
+        self.page.goto('http://127.0.0.1:'+str(self.server.server_port)+'/index.html')
+        module=self.page.locator('#receiver-module embed')
+        expect(module).to_have_attribute('type','application/x-nacl')
+        expect(module).to_have_attribute('src','receiver/receiver.nmf')
+        expect(module).to_have_attribute('receiver-ip','192.0.2.20')
+        identity=module.get_attribute('receiver-id')
+        self.assertRegex(identity,r'^[0-9A-F]{12}$')
+        self.assertEqual(int(identity[:2],16)&3,2)
+        self.page.reload()
+        expect(self.page.locator('#receiver-module embed')).to_have_attribute('receiver-id',identity)
+        # This checks bootstrap parameters only; desktop Chrome cannot execute NaCl.
+        self.page.locator('#receiver-module').evaluate("el => el.dispatchEvent(new Event('error'))")
+        self.assertEqual(self.page.evaluate('window.AirTizenEmbedded.phase'),'failed')
+
+    def test_embedded_module_rejects_missing_lan(self):
+        self.context.add_init_script("""window.tizen={systeminfo:{getPropertyValue:function(name,ok){
+            ok({ipAddress:'127.0.0.1'});
+        }}};""")
+        self.page.goto('http://127.0.0.1:'+str(self.server.server_port)+'/index.html')
+        self.assertEqual(self.page.locator('#receiver-module').count(),0)
+        self.assertEqual(self.page.evaluate('window.AirTizenEmbedded.phase'),'failed')
+        self.assertIn('No active TV IPv4',self.page.evaluate('window.AirTizenEmbedded.error'))
+
     def test_remote_text_is_not_html(self):
         with urllib.request.urlopen('http://127.0.0.1:45110/status') as response:
             data=json.load(response)

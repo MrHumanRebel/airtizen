@@ -38,7 +38,7 @@ void airtizen_audio_close(void) {
     audio_out_destroy(g_output);
     g_output = NULL;
 }
-#else
+#elif !defined(__native_client__)
 /* Host build validates protocol/runtime. Audio device exists only on Tizen. */
 static int g_open;
 int airtizen_audio_open(int sample_rate, int channels, int bits_per_sample) {

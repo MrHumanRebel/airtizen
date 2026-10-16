@@ -3,6 +3,7 @@
 The Tizen signer performs signing. This check does not establish Samsung TV trust.
 """
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -18,17 +19,21 @@ from zipfile import ZipFile
 
 DS={'ds':'http://www.w3.org/2000/09/xmldsig#'}
 
-def verify(path,version):
+def verify(path,version,require_embedded=False):
     with ZipFile(path) as archive:
         names=archive.namelist()
         if sum(item.file_size for item in archive.infolist()) > 64 * 1024 * 1024:
-            raise ValueError('Web UI archive exceeds the 64 MiB validation limit')
+            raise ValueError('WGT archive exceeds the 64 MiB validation limit')
         if len(names)!=len(set(names)): raise ValueError('Duplicate archive entries')
         for name in names:
             p=PurePosixPath(name)
             if p.is_absolute() or '..' in p.parts or '\\' in name: raise ValueError('Unsafe archive path')
         for name in ('config.xml','index.html','js/app.js','js/native-bridge.js','icon.png','author-signature.xml','signature1.xml'):
             if name not in names: raise ValueError('Missing package entry: '+name)
+        if require_embedded:
+            spec=importlib.util.spec_from_file_location('embedded',Path(__file__).with_name('embedded-receiver.py'))
+            embedded=importlib.util.module_from_spec(spec);spec.loader.exec_module(embedded)
+            embedded.check_embedded(archive.read)
         if ET.fromstring(archive.read('config.xml')).get('version')!=version: raise ValueError('Version mismatch')
         covered=set()
         for name in ('author-signature.xml','signature1.xml'):
@@ -62,5 +67,5 @@ def verify_crypto(path,jdk=None,allow_sdk_distributor=False):
         subprocess.run(command,check=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('package');parser.add_argument('version');parser.add_argument('--jdk');parser.add_argument('--allow-sdk-distributor',action='store_true')
-    args=parser.parse_args();verify(args.package,args.version);verify_crypto(args.package,args.jdk,args.allow_sdk_distributor)
+    parser=argparse.ArgumentParser();parser.add_argument('package');parser.add_argument('version');parser.add_argument('--jdk');parser.add_argument('--allow-sdk-distributor',action='store_true');parser.add_argument('--require-embedded-receiver',action='store_true')
+    args=parser.parse_args();verify(args.package,args.version,args.require_embedded_receiver);verify_crypto(args.package,args.jdk,args.allow_sdk_distributor)

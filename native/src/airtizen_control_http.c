@@ -16,13 +16,27 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 static pthread_t g_thread;
 static int g_started, g_server_fd = -1, g_stop[2] = {-1, -1};
 static unsigned short g_port;
+/* nacl_io does not implement SO_RCVTIMEO/SO_SNDTIMEO. Bound I/O with select. */
+static int wait_socket(int fd,int writing) {
+    fd_set set;struct timeval timeout={1,0};int result;
+    do {
+        FD_ZERO(&set);FD_SET(fd,&set);timeout.tv_sec=1;timeout.tv_usec=0;
+        result=select(fd+1,writing?NULL:&set,writing?&set:NULL,NULL,&timeout);
+    } while(result<0 && errno==EINTR);
+    return result>0?0:-1;
+}
 static int send_all(int fd, const char *data, size_t length) {
     while (length) {
-        ssize_t n = send(fd, data, length, MSG_NOSIGNAL);
+        ssize_t n;
+        if(wait_socket(fd,1))return -1;
+        n = send(fd, data, length>16384?16384:length, MSG_NOSIGNAL);
         if (n < 0 && errno == EINTR) continue;
         if (n <= 0) return -1;
         data += n; length -= (size_t)n;
@@ -60,6 +74,7 @@ static void handle_client(int fd) {
     while (!(end = strstr(req, "\r\n\r\n"))) {
         ssize_t n;
         if (used == sizeof(req) - 1) { respond(fd, "431 Request Header Fields Too Large", "{\"ok\":false}"); return; }
+        if(wait_socket(fd,0)){respond(fd,"408 Request Timeout","{\"ok\":false}");return;}
         n = recv(fd, req + used, sizeof(req) - 1 - used, 0);
         if (n <= 0) { respond(fd, "408 Request Timeout", "{\"ok\":false}"); return; }
         if (memchr(req + used, 0, (size_t)n)) { respond(fd, "400 Bad Request", "{\"ok\":false}"); return; }

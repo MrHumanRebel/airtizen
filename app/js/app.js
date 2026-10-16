@@ -56,8 +56,9 @@
       $('cover-art').src = artwork ? 'http://127.0.0.1:45110/artwork/' + artwork : 'assets/airtizen-logo.png';
     }
     text('media-state', s.audio === 'playing' ? 'Playing audio' : s.audio === 'host_stub' ? 'Audio received by host test output' : 'Connected');
-    var platform = window.AirTizenPlatform || {};
-    text('runtime-details', 'Platform: ' + (platform.version || 'unknown') + '   WebAssembly: ' + !!platform.webAssembly + '   MediaSource: ' + !!platform.mediaSource + '\n' + (platform.userAgent || '') + '\n' + 'mDNS: ' + s.mdns + '   RAOP: ' + s.raop + '   Pairing: ' + s.pair + '\nAudio: ' + s.audio + '   Rate: ' + s.rate + '\nLast error: ' + (s.lastError || 'none'));
+    var platform = window.AirTizenPlatform || {}, embedded = window.AirTizenEmbedded || {};
+    if (!res.ok && embedded.error) text('hero-detail', embedded.error);
+    text('runtime-details', 'Embedded receiver: ' + (embedded.phase || 'not loaded') + '\n' + 'Platform: ' + (platform.version || 'unknown') + '   WebAssembly: ' + !!platform.webAssembly + '   MediaSource: ' + !!platform.mediaSource + '\n' + (platform.userAgent || '') + '\n' + 'mDNS: ' + s.mdns + '   RAOP: ' + s.raop + '   Pairing: ' + s.pair + '\nAudio: ' + s.audio + '   Rate: ' + s.rate + '\nLast error: ' + (s.lastError || 'none'));
     if (developer) {
       text('full-log', res.log || 'No recent log entries.');
       $('full-log').scrollTop = $('full-log').scrollHeight;

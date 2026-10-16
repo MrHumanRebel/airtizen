@@ -408,6 +408,12 @@ raop_rtp_thread_time(void *arg)
         int sendlen = sendto(raop_rtp->tsock, (char *)time, sizeof(time), 0, (struct sockaddr *) &raop_rtp->remote_saddr, raop_rtp->remote_saddr_len);
         logger_log(raop_rtp->logger, LOGGER_DEBUG, "raop_rtp_thread_time sendlen = %d", sendlen);
 
+        /* A missing sender timing reply must not hang app exit/TEARDOWN. */
+        {
+            fd_set ready;struct timeval timeout={0,250000};
+            FD_ZERO(&ready);FD_SET(raop_rtp->tsock,&ready);
+            if(select(raop_rtp->tsock+1,&ready,NULL,NULL,&timeout)<=0)continue;
+        }
         saddrlen = sizeof(saddr);
         packetlen = recvfrom(raop_rtp->tsock, (char *)packet, sizeof(packet), 0,
                              (struct sockaddr *)&saddr, &saddrlen);

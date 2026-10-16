@@ -89,59 +89,44 @@ raop = raop.replace("httpd_cbs.conn_destroy = &conn_destroy;", "httpd_cbs.conn_d
 write("raop.generated.c", raop)
 
 buffer = read("raop_buffer.c").replace("#include <sha512.h>", '#include "ed25519/sha512.h"')
-buffer = buffer.replace('free(raop_buffer->phandle);', 'aacDecoder_Close(raop_buffer->phandle);')
+buffer = '#include "airtizen_alac.h"\n#include "airtizen_aac.h"\n' + buffer
+start = buffer.index('#include "fdk-aac/libAACdec/include/aacdecoder_lib.h"')
+end = buffer.index('#include "stream.h"', start) + len('#include "stream.h"')
+buffer = buffer[:start] + buffer[end:]
+buffer = buffer.replace('HANDLE_AACDECODER phandle;', 'airtizen_aac *phandle;\n    airtizen_alac *alac;\n    unsigned codec_type, configured_rate, configured_channels;')
+start = buffer.index('static int fdk_flags')
+end = buffer.index('void\nraop_buffer_init_key_iv', start)
+buffer = buffer[:start] + buffer[end:]
+buffer = buffer.replace('raop_buffer->logger = logger;', 'raop_buffer->logger = logger;\n    raop_buffer->codec_type=8;raop_buffer->configured_rate=44100;raop_buffer->configured_channels=2;')
+buffer = buffer.replace('create_fdk_aac_decoder(logger)', 'airtizen_aac_create(8,44100,2,480)')
+buffer = buffer.replace('free(raop_buffer->phandle);', 'airtizen_aac_destroy(raop_buffer->phandle);')
+buffer = buffer.replace('aacDecoder_Close(raop_buffer->phandle);', 'airtizen_aac_destroy(raop_buffer->phandle);')
+buffer = buffer.replace('airtizen_aac_destroy(raop_buffer->phandle);\n\t\tfree(raop_buffer->buffer);', 'airtizen_aac_destroy(raop_buffer->phandle);\n        airtizen_alac_destroy(raop_buffer->alac);\n\t\tfree(raop_buffer->buffer);')
+buffer = buffer.replace('audio_buffer_size = 480 * 2 * 2;', 'audio_buffer_size = 4096 * 2 * 2;')
 buffer = buffer.replace('if (datalen < 12 ||', 'if (!data || datalen <= 12 ||')
-# A rejected packet is a normal drop; the UDP caller must not assert on input.
 buffer = buffer.replace('return -1;\n    }\n    unsigned short seqnum', 'return 0;\n    }\n    unsigned short seqnum')
-buffer = buffer.replace('memset(packetbuf, 0, payloadsize);', 'if (!packetbuf) { entry->available = 0; return 0; }\n    memset(packetbuf, 0, payloadsize);')
-buffer = buffer.replace('entry->audio_buffer, pcm_pkt_size, fdk_flags', 'entry->audio_buffer, entry->audio_buffer_size / sizeof(INT_PCM), fdk_flags')
-buffer = buffer.replace('entry->audio_buffer_len = pcm_pkt_size;', 'entry->audio_buffer_len = 0;')
-buffer = buffer.replace('CStreamInfo* streamInfo = aacDecoder_GetStreamInfo(raop_buffer->phandle);', 'if (ret != AAC_DEC_OK) { free(packetbuf); entry->available = 0; return 0; }\n    CStreamInfo* streamInfo = aacDecoder_GetStreamInfo(raop_buffer->phandle);')
-buffer = buffer.replace('if (streamInfo != NULL) {', 'if (streamInfo != NULL && streamInfo->frameSize > 0 && streamInfo->numChannels > 0 && streamInfo->frameSize <= entry->audio_buffer_size / (sizeof(INT_PCM) * streamInfo->numChannels)) {\n        entry->audio_buffer_len = streamInfo->frameSize * streamInfo->numChannels * sizeof(INT_PCM);')
-buffer = buffer.replace('entry->bits_per_sample = pcm_pkt_size * 8 / (streamInfo->frameSize * entry->channels);','entry->bits_per_sample = sizeof(INT_PCM) * 8;')
-buffer = buffer.replace('/* Update the raop_buffer seqnums */', 'if (!entry->audio_buffer_len) { free(packetbuf); entry->available = 0; return 0; }\n    /* Update the raop_buffer seqnums */')
-# Cast before shifts to avoid signed overflow on high RTP timestamps.
+buffer = buffer.replace('memset(packetbuf, 0, payloadsize);', 'if (!packetbuf) { entry->available=0; return 0; }\n    memset(packetbuf,0,payloadsize);')
 for index in (4, 8):
     buffer = buffer.replace(f'(data[{index}] << 24)', f'((uint32_t)data[{index}] << 24)')
-buffer = '#include "airtizen_alac.h"\n' + buffer
-buffer = buffer.replace('HANDLE_AACDECODER phandle;', 'HANDLE_AACDECODER phandle;\n    airtizen_alac *alac;\n    unsigned codec_type, configured_rate, configured_channels;')
-buffer = buffer.replace('audio_buffer_size = 480 * 2 * 2;', 'audio_buffer_size = 4096 * 2 * 2;')
-buffer = buffer.replace('raop_buffer->logger = logger;', 'raop_buffer->logger = logger;\n    raop_buffer->codec_type = 8;')
-buffer = buffer.replace('aacDecoder_Close(raop_buffer->phandle);\n\t\tfree(raop_buffer->buffer);', 'aacDecoder_Close(raop_buffer->phandle);\n        airtizen_alac_destroy(raop_buffer->alac);\n\t\tfree(raop_buffer->buffer);')
 start = buffer.index('\t// aac decode to pcm')
 end = buffer.index('\n#ifdef DUMP_AUDIO', start)
-buffer = buffer[:start] + """    if (raop_buffer->codec_type == 2) {
-        entry->audio_buffer_len = (int)airtizen_alac_decode(raop_buffer->alac, packetbuf, (size_t)payloadsize,
-            entry->audio_buffer, (size_t)entry->audio_buffer_size);
-        entry->sample_rate = raop_buffer->configured_rate;
-        entry->channels = (uint16_t)raop_buffer->configured_channels;
-        entry->bits_per_sample = 16;
-    } else {
-""" + buffer[start:end] + '\n    }\n' + buffer[end:]
+buffer = buffer[:start] + """    entry->audio_buffer_len=(int)(raop_buffer->codec_type==2 ?
+        airtizen_alac_decode(raop_buffer->alac,packetbuf,(size_t)payloadsize,entry->audio_buffer,(size_t)entry->audio_buffer_size) :
+        airtizen_aac_decode(raop_buffer->phandle,packetbuf,(size_t)payloadsize,entry->audio_buffer,(size_t)entry->audio_buffer_size));
+    entry->sample_rate=raop_buffer->configured_rate;
+    entry->channels=(uint16_t)raop_buffer->configured_channels;entry->bits_per_sample=16;
+""" + buffer[end:]
+buffer = buffer.replace('/* Update the raop_buffer seqnums */', 'if (!entry->audio_buffer_len) { free(packetbuf);entry->available=0;return 0; }\n    /* Update the raop_buffer seqnums */')
 buffer += """
-int raop_buffer_configure_audio(raop_buffer_t *buffer, unsigned ct, unsigned frames, unsigned rate, unsigned channels) {
-    airtizen_alac *decoder = NULL;
-    if (!buffer || (ct != 2 && ct != 4 && ct != 8)) return -1;
-    if (ct == 8 && (frames != 480 || rate != 44100 || channels != 2)) return -1;
-    if (ct == 4) {
-        UCHAR config[2] = { rate==48000 ? 0x11 : 0x12, rate==48000 ? 0x90 : 0x10 };
-        UCHAR *configs[] = {config}; UINT size=sizeof(config);
-        if(frames!=1024 || (rate!=44100 && rate!=48000) || channels!=2 || aacDecoder_ConfigRaw(buffer->phandle,configs,&size)!=AAC_DEC_OK)return -1;
-    } else if(ct == 8) {
-        UCHAR config[] = {0xf8,0xe8,0x50,0};UCHAR *configs[]={config};UINT size=sizeof(config);
-        if(aacDecoder_ConfigRaw(buffer->phandle,configs,&size)!=AAC_DEC_OK)return -1;
-    }
-    if (ct == 2) {
-        decoder = airtizen_alac_create(rate, channels, frames);
-        if (!decoder) return -1;
-    }
-    raop_buffer_flush(buffer, -1);
-    airtizen_alac_destroy(buffer->alac);
-    buffer->alac = decoder;
-    buffer->codec_type = ct;
-    buffer->configured_rate = rate;
-    buffer->configured_channels = channels;
-    return 0;
+int raop_buffer_configure_audio(raop_buffer_t *buffer,unsigned ct,unsigned frames,unsigned rate,unsigned channels) {
+    airtizen_alac *alac=NULL;airtizen_aac *aac=NULL;
+    if(!buffer)return -1;
+    if(ct==2){alac=airtizen_alac_create(rate,channels,frames);if(!alac)return -1;}
+    else if(ct==4 || ct==8){aac=airtizen_aac_create(ct,rate,channels,frames);if(!aac)return -1;}
+    else return -1;
+    raop_buffer_flush(buffer,-1);airtizen_alac_destroy(buffer->alac);airtizen_aac_destroy(buffer->phandle);
+    buffer->alac=alac;buffer->phandle=aac;buffer->codec_type=ct;
+    buffer->configured_rate=rate;buffer->configured_channels=channels;return 0;
 }
 """
 write("raop_buffer.generated.c", buffer)
