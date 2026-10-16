@@ -21,7 +21,7 @@ Each configured P12 requires its password; invalid or incomplete configured cred
 
 The SDK public distributor has a legacy 1024-bit test key and an expired certificate. Following the SDK sideload path does not establish modern certificate-chain trust. Its exact certificate SHA-256 (`cdd81c11422bc3e78288150af2e70787a3373be548f0bcf99ac8a5bd166b9008`) is accepted only with explicit `--allow-sdk-distributor` and only for `signature1.xml`. The author requirement remains unchanged; arbitrary weak certificates remain rejected. JDK secure XML validation, RSA signature verification and every reference digest remain enabled. Default/custom package signing, signature tampering and rejection of the SDK key as an author are exercised against the real CLI in `tests/test_signing_modes.py`.
 
-The official Tizen Studio 4.5.1 Web CLI installer is pinned by SHA-256 in `install-tizen-web-cli.sh`; its embedded payload is also verified. There is no optional checksum override. The installer uses an isolated JVM `user.home` so it works without writing to the shell home directory. Installation, staged build, interactive signing through a bounded PTY, and cryptographic validation have been exercised locally with both the community/SDK public identities and configured 3072-bit development identities. Those certificates establish the signing workflow, not Samsung device authorization. The Web CLI does not supply a compatible native Tizen 3.0 TV rootstrap, and no repository Actions run or Samsung installation is claimed by the local tests.
+The official Tizen Studio 4.5.1 Web CLI installer is pinned by SHA-256 in `install-tizen-web-cli.sh`; its embedded payload is also verified. There is no optional checksum override. The installer uses an isolated JVM `user.home` so it works without writing to the shell home directory. Installation, staged build, headless signing with SDK-encoded inline passwords in a private temporary profile and a bounded PTY wrapper, and cryptographic validation have been exercised locally with both the community/SDK public identities and configured 3072-bit development identities. Those certificates establish the signing workflow, not Samsung device authorization. The Web CLI does not supply a compatible native Tizen 3.0 TV rootstrap, and no repository Actions run or Samsung installation is claimed by the local tests.
 
 ## Automatic versioning
 
@@ -33,8 +33,20 @@ The release job uses `v<version>` at the validated commit. Rerunning an existing
 
 ## Package validation
 
-Before upload, `verify-wgt.py` checks archive paths/duplicates, expanded size, required files, version and signed payload coverage/digests. Its CLI also invokes `VerifyWgtSignature.java` using JDK XMLDSig to verify both RSA signatures and all XML references with external resolution disabled. A regression test modifies the actual RSA signature and requires rejection. Strict verification is the default; public SDK packages require the explicit compatibility option described above. The signer refuses existing signatures/output packages so the SDK cannot silently reuse a previous signed artifact.
+Before upload, `verify-wgt.py` checks archive paths/duplicates, expanded size, required files, version and signed payload coverage/digests. Its CLI also invokes `VerifyWgtSignature.java` using JDK XMLDSig to verify both RSA signatures and all XML references with external resolution disabled. A regression test modifies the actual RSA signature and requires rejection. Strict verification is the default; public SDK packages require the explicit compatibility option described above. The CLI-generated `.pwd` password-storage references are replaced with inline values encoded by the SDK’s own `CipherUtil`, using XML serialization in a mode-0600 temporary file, avoiding desktop keyring/console dependence; the cleanup trap deletes that file and restores the original CLI profile path. A regression signs with stdin disconnected, after proving missing password storage fails. The signer refuses existing signatures/output packages so the SDK cannot silently reuse a previous signed artifact.
 
 These checks do not establish Samsung certificate-chain trust, device authorization or successful installation. SHA256SUMS detects artifact corruption; it does not prove device compatibility.
 
 The current workflow releases the **WGT UI only**. It does not create a native service TPK and cannot be called a complete receiver release. Release notes explicitly state this limitation. Do not mark releases stable until the device acceptance criteria in PRODUCTION_READINESS.md pass.
+
+## Headless signing regression
+
+After installing the SDK, run:
+
+```bash
+export TIZEN_STUDIO_ROOT=/path/to/tizen-studio
+export JAVA_TOOL_OPTIONS=-Duser.home=/path/to/isolated-sdk-user
+python3 tests/test_signing_modes.py
+```
+
+The suite covers six real CLI scenarios, including a package command with stdin disconnected and stdout captured. Missing `.pwd` storage must fail first; encoding the inline passwords with the SDK API must then produce a cryptographically valid package without a console or desktop keyring. The regular public build also asserts that the signer does not ask for author/distributor passwords. Plaintext XML substitution is insufficient with this pinned SDK: it attempts to decrypt non-`.pwd` values using `CipherUtil`.
