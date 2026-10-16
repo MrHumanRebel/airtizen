@@ -5,10 +5,6 @@ stage_dir="$(realpath "$1")"
 output_dir="$(realpath -m "$2")"
 : "${GITHUB_WORKSPACE:?repository root is required}"
 : "${RUNNER_TEMP:?temporary directory is required}"
-: "${TIZEN_CERT_P12_BASE64:?author certificate is required}"
-: "${TIZEN_CERT_PASSWORD:?author password is required}"
-: "${TIZEN_DISTRIBUTOR_P12_BASE64:?TV distributor certificate is required}"
-: "${TIZEN_DISTRIBUTOR_PASSWORD:?distributor password is required}"
 : "${TIZEN_PROFILE_NAME:=AirTizen}"
 export TIZEN_STUDIO_ROOT="${TIZEN_STUDIO_ROOT:-$GITHUB_WORKSPACE/tizen-studio}"
 tizen_bin="$TIZEN_STUDIO_ROOT/tools/ide/bin/tizen"
@@ -33,8 +29,32 @@ cleanup() {
   rm -rf "$sign_dir"
 }
 trap cleanup EXIT
-printf '%s' "$TIZEN_CERT_P12_BASE64" | base64 --decode > "$sign_dir/author.p12"
-printf '%s' "$TIZEN_DISTRIBUTOR_P12_BASE64" | base64 --decode > "$sign_dir/distributor.p12"
+if [ -n "${TIZEN_CERT_P12_BASE64:-}" ]; then
+  : "${TIZEN_CERT_PASSWORD:?configured author P12 requires its password}"
+  printf '%s' "$TIZEN_CERT_P12_BASE64" | base64 --decode > "$sign_dir/author.p12"
+  author_mode=configured-author
+else
+  if [ -n "${TIZEN_CERT_PASSWORD:-}" ] && [ "$TIZEN_CERT_PASSWORD" != 1234 ]; then
+    echo 'Author password without an author P12: supply both, or use the public community default.' >&2; exit 1
+  fi
+  cp "$GITHUB_WORKSPACE/certificates/community-author.p12" "$sign_dir/author.p12"
+  export TIZEN_CERT_PASSWORD=1234
+  author_mode=public-community-author
+fi
+verify_options=()
+if [ -n "${TIZEN_DISTRIBUTOR_P12_BASE64:-}" ]; then
+  : "${TIZEN_DISTRIBUTOR_PASSWORD:?configured distributor P12 requires its password}"
+  printf '%s' "$TIZEN_DISTRIBUTOR_P12_BASE64" | base64 --decode > "$sign_dir/distributor.p12"
+  distributor_mode=configured-distributor
+else
+  if [ -n "${TIZEN_DISTRIBUTOR_PASSWORD:-}" ] && [ "$TIZEN_DISTRIBUTOR_PASSWORD" != tizenpkcs12passfordsigner ]; then
+    echo 'Distributor password requires a distributor P12.' >&2; exit 1
+  fi
+  cp "$TIZEN_STUDIO_ROOT/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12" "$sign_dir/distributor.p12"
+  export TIZEN_DISTRIBUTOR_PASSWORD=tizenpkcs12passfordsigner
+  distributor_mode=public-sdk-distributor
+  verify_options+=(--allow-sdk-distributor)
+fi
 "$tizen_bin" cli-config "profiles.path=$sign_dir/profiles.xml"
 "$tizen_bin" security-profiles add -f -n "$TIZEN_PROFILE_NAME" \
   -a "$sign_dir/author.p12" -p "$TIZEN_CERT_PASSWORD" \
@@ -56,4 +76,5 @@ import sys,xml.etree.ElementTree as ET
 print(ET.parse(sys.argv[1]).getroot().get('version'))
 PY
 )"
-python3 "$GITHUB_WORKSPACE/scripts/verify-wgt.py" "$output_dir/AirTizen.wgt" "$version"
+python3 "$GITHUB_WORKSPACE/scripts/verify-wgt.py" "$output_dir/AirTizen.wgt" "$version" "${verify_options[@]}"
+printf '%s\n%s\n' "$author_mode" "$distributor_mode" > "$output_dir/SIGNING-MODE.txt"

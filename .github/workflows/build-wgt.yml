@@ -77,20 +77,6 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
-      - name: Require configured signing identity
-        env:
-          CERT: ${{ secrets.TIZEN_CERT_P12_BASE64 }}
-          PASSWORD: ${{ secrets.TIZEN_CERT_PASSWORD }}
-          DISTRIBUTOR: ${{ secrets.TIZEN_DISTRIBUTOR_P12_BASE64 }}
-          DISTRIBUTOR_PASSWORD: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
-        run: |
-          set -euo pipefail
-          for required in CERT PASSWORD DISTRIBUTOR DISTRIBUTOR_PASSWORD; do
-            if [ -z "${!required}" ]; then
-              echo "::error::Configure author and Samsung TV distributor certificates/passwords. No unsigned release fallback is permitted."
-              exit 1
-            fi
-          done
       - name: Calculate version and stage UI
         id: version
         run: |
@@ -108,6 +94,8 @@ jobs:
           bash scripts/install-tizen-web-cli.sh
           echo "TIZEN_STUDIO_ROOT=$AIRTIZEN_TIZEN_USER_ROOT/tizen-studio" >> "$GITHUB_ENV"
           echo "JAVA_TOOL_OPTIONS=-Duser.home=$AIRTIZEN_TIZEN_USER_ROOT" >> "$GITHUB_ENV"
+      - name: Test public and configured signing modes
+        run: python3 tests/test_signing_modes.py
       - name: Configure signing and build signed WGT
         env:
           TIZEN_CERT_P12_BASE64: ${{ secrets.TIZEN_CERT_P12_BASE64 }}
@@ -120,15 +108,20 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          python3 tests/test_wgt_crypto.py app/release/AirTizen.wgt "$TIZEN_STUDIO_ROOT/jdk"
+          verify_options=()
+          if grep -qx public-sdk-distributor app/release/SIGNING-MODE.txt; then
+            verify_options+=(--allow-sdk-distributor)
+          fi
+          python3 tests/test_wgt_crypto.py app/release/AirTizen.wgt "$TIZEN_STUDIO_ROOT/jdk" "${verify_options[@]}"
           cd app/release
-          sha256sum AirTizen.wgt > SHA256SUMS
+          sha256sum AirTizen.wgt SIGNING-MODE.txt > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: AirTizen-${{ steps.version.outputs.version }}-signed-wgt
           path: |
             app/release/AirTizen.wgt
             app/release/SHA256SUMS
+            app/release/SIGNING-MODE.txt
           if-no-files-found: error
 
   release:
@@ -159,6 +152,6 @@ jobs:
             echo "::notice::Release v$VERSION already exists; leaving its artifacts unchanged."
             exit 0
           fi
-          gh release create "v$VERSION" release/AirTizen.wgt release/SHA256SUMS \
+          gh release create "v$VERSION" release/AirTizen.wgt release/SHA256SUMS release/SIGNING-MODE.txt \
             --target "$COMMIT" --prerelease --title "AirTizen $VERSION (experimental)" \
             --notes-file docs/RELEASE_NOTES.md

@@ -50,15 +50,17 @@ def verify(path,version):
         if not payload.issubset(covered): raise ValueError('Unsigned files in WGT: '+str(sorted(payload-covered)))
     print('Signed WGT structure, payload digests and version verified')
 
-def verify_crypto(path,jdk=None):
+def verify_crypto(path,jdk=None,allow_sdk_distributor=False):
     root=jdk or (str(Path(os.environ['TIZEN_STUDIO_ROOT'])/'jdk') if os.environ.get('TIZEN_STUDIO_ROOT') else None)
     compiler=str(Path(root)/'bin/javac') if root else shutil.which('javac')
     runtime=str(Path(root)/'bin/java') if root else shutil.which('java')
     if not compiler or not runtime:raise ValueError('A JDK is required for cryptographic WGT verification; set TIZEN_STUDIO_ROOT or --jdk')
     with tempfile.TemporaryDirectory(prefix='airtizen-signature-') as directory:
         subprocess.run([compiler,'-d',directory,str(Path(__file__).with_name('VerifyWgtSignature.java'))],check=True)
-        subprocess.run([runtime,'-cp',directory,'VerifyWgtSignature',str(Path(path).resolve())],check=True)
+        command=[runtime,'-cp',directory,'VerifyWgtSignature',str(Path(path).resolve())]
+        if allow_sdk_distributor:command.append('--allow-sdk-distributor')
+        subprocess.run(command,check=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('package');parser.add_argument('version');parser.add_argument('--jdk')
-    args=parser.parse_args();verify(args.package,args.version);verify_crypto(args.package,args.jdk)
+    parser=argparse.ArgumentParser();parser.add_argument('package');parser.add_argument('version');parser.add_argument('--jdk');parser.add_argument('--allow-sdk-distributor',action='store_true')
+    args=parser.parse_args();verify(args.package,args.version);verify_crypto(args.package,args.jdk,args.allow_sdk_distributor)

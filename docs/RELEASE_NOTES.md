@@ -4,4 +4,4 @@ The native implementation now includes ALAC/AAC audio, encrypted H.264 mirroring
 
 This signed WGT contains the web UI only and requires a separately installed native receiver service. No verified Tizen 3.0 native service TPK is supplied by this workflow. Do not treat this prerelease as a production-ready full AirPlay receiver.
 
-The signing profile must authorize the target Samsung TV. Keep the existing author identity for upgrades. SHA256SUMS accompanies the artifact.
+The default package uses the public community author and SDK distributor for sideloading; configured identities are also supported. See SIGNING-MODE.txt. Package signatures are verified, but public SDK signing does not prove authorization on every Samsung firmware. Enable Developer Mode and, if required by the device, re-sign with its authorized Samsung distributor. Keep the existing author identity for upgrades. SHA256SUMS accompanies the artifact.

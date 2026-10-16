@@ -3,6 +3,7 @@
 import java.io.*;
 import java.net.URI;
 import java.security.Key;
+import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.util.*;
@@ -16,12 +17,23 @@ import javax.xml.parsers.*;
 import org.w3c.dom.*;
 public final class VerifyWgtSignature {
     static final class Keys extends KeySelector {
+        private final boolean allowSdk;
+        Keys(boolean allowSdk){this.allowSdk=allowSdk;}
+        private boolean isSdkCertificate(X509Certificate cert) throws KeySelectorException {
+            try {
+                StringBuilder hash=new StringBuilder();
+                for(byte value:MessageDigest.getInstance("SHA-256").digest(cert.getEncoded()))hash.append(String.format("%02x",value & 255));
+                return hash.toString().equals("cdd81c11422bc3e78288150af2e70787a3373be548f0bcf99ac8a5bd166b9008");
+            } catch(Exception error){throw new KeySelectorException(error);}
+        }
         public KeySelectorResult select(KeyInfo info,Purpose purpose,AlgorithmMethod method,XMLCryptoContext context) throws KeySelectorException {
             if(info==null)throw new KeySelectorException("Missing KeyInfo");
             for(Object object:info.getContent())if(object instanceof X509Data) {
                 for(Object item:((X509Data)object).getContent())if(item instanceof X509Certificate) {
-                    final Key key=((X509Certificate)item).getPublicKey();
-                    if(!(key instanceof RSAPublicKey) || ((RSAPublicKey)key).getModulus().bitLength()<2048)throw new KeySelectorException("RSA key below 2048 bits");
+                    X509Certificate cert=(X509Certificate)item;
+                    final Key key=cert.getPublicKey();
+                    int minimum=allowSdk && isSdkCertificate(cert)?1024:2048;
+                    if(!(key instanceof RSAPublicKey) || ((RSAPublicKey)key).getModulus().bitLength()<minimum)throw new KeySelectorException("RSA key below policy minimum");
                     return new KeySelectorResult(){public Key getKey(){return key;}};
                 }
             }
@@ -29,7 +41,8 @@ public final class VerifyWgtSignature {
         }
     }
     public static void main(String[] args) throws Exception {
-        if(args.length!=1)throw new IllegalArgumentException("Expected WGT path");
+        if(args.length<1 || args.length>2 || (args.length==2 && !args[1].equals("--allow-sdk-distributor")))throw new IllegalArgumentException("Expected WGT path and optional --allow-sdk-distributor");
+        boolean sdk=args.length==2;
         DocumentBuilderFactory builder=DocumentBuilderFactory.newInstance();builder.setNamespaceAware(true);
         builder.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING,true);
         builder.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);
@@ -52,7 +65,9 @@ public final class VerifyWgtSignature {
                 }
                 NodeList signatures=document.getElementsByTagNameNS(XMLSignature.XMLNS,"Signature");
                 if(signatures.getLength()!=1)throw new SecurityException("Expected exactly one signature document");
-                DOMValidateContext context=new DOMValidateContext(new Keys(),signatures.item(0));
+                // Only this exact public SDK certificate, only in the distributor
+                // signature, may use its legacy key. Author policy stays >=2048.
+                DOMValidateContext context=new DOMValidateContext(new Keys(sdk && filename.equals("signature1.xml")),signatures.item(0));
                 context.setProperty("org.jcp.xml.dsig.secureValidation",Boolean.TRUE);
                 context.setURIDereferencer(new URIDereferencer(){public Data dereference(URIReference reference,XMLCryptoContext ctx) throws URIReferenceException {
                     String uri=reference.getURI();
