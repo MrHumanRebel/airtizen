@@ -42,10 +42,12 @@ jobs:
           npx --yes acorn@8.15.0 --ecma5 app/js/platform.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/app.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/native-bridge.js > /dev/null
-      - name: Browser integration tests
+      - name: Browser integration tests (Chrome H.264/AAC)
+        env:
+          CHROMIUM_CHANNEL: chrome
         run: |
           set -euo pipefail
-          python3 -m playwright install --with-deps chromium
+          python3 -m playwright install --with-deps chrome
           python3 tests/test_gui.py
           python3 tests/test_mirror_gui.py
           python3 tests/test_share_gui.py

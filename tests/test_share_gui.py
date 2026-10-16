@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """AirPlay HTTP URL video/audio sharing and browser playback/control regression."""
-import functools,http.server,json,os,plistlib,shutil,socket,subprocess,tempfile,threading,time,unittest,urllib.request,urllib.error
+import functools,http.server,json,plistlib,socket,subprocess,tempfile,threading,time,unittest,urllib.request,urllib.error
 from pathlib import Path
 from media_server import MediaHandler
+from browser_support import launch_browser, require_media_support
 from playwright.sync_api import sync_playwright,expect
 ROOT=Path(__file__).resolve().parents[1]
 def airplay(path,body=None):
@@ -25,8 +26,9 @@ class VideoShare(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as result:airplay('/play',plistlib.dumps({'Content-Location':location},fmt=plistlib.FMT_BINARY))
                 self.assertEqual(result.exception.code,400)
             with sync_playwright() as playwright:
-                browser=playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE') or shutil.which('chromium'),headless=True,args=['--no-sandbox'])
+                browser=launch_browser(playwright)
                 page=browser.new_page(viewport={'width':1920,'height':1080});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+                require_media_support(page)
                 page.set_content('<iframe name="tv" sandbox="allow-scripts" style="width:1920px;height:1080px" src="http://127.0.0.1:'+str(server.server_port)+'/app/index.html"></iframe>')
                 ui=page.frame(name='tv');expect(ui.get_by_role('heading',name='Receiver test mode')).to_be_visible()
                 location='http://127.0.0.1:'+str(server.server_port)+'/tests/fixtures/shared-av.mp4'
