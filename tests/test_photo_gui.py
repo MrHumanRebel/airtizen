@@ -3,6 +3,8 @@
 import functools
 import http.server
 import json
+import os
+import secrets
 from pathlib import Path
 import plistlib
 import socket
@@ -20,6 +22,7 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSION = 'photo-session-1'
+CONTROL_TOKEN = secrets.token_hex(32)
 
 
 def png():
@@ -29,6 +32,7 @@ def png():
 
 
 def request(path, body=None, headers=None, method=None, port=5000):
+    if port == 45110: headers = dict(headers or {}, **{'X-AirTizen-Control': CONTROL_TOKEN})
     req = urllib.request.Request('http://127.0.0.1:' + str(port) + path, data=body, headers=headers or {}, method=method)
     return urllib.request.urlopen(req, timeout=5)
 
@@ -68,7 +72,7 @@ class PhotoShare(unittest.TestCase):
                 sock.settimeout(.2)
                 self.assertNotEqual(sock.connect_ex(('127.0.0.1', port)), 0)
         with tempfile.TemporaryFile() as log:
-            process = subprocess.Popen([str(ROOT / 'native/build/airtizen_runtime')], stdout=log, stderr=log)
+            process = subprocess.Popen([str(ROOT / 'native/build/airtizen_runtime')], stdout=log, stderr=log, env=dict(os.environ, AIRTIZEN_CONTROL_TOKEN=CONTROL_TOKEN))
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT)))
             threading.Thread(target=server.serve_forever, daemon=True).start()
             try:
@@ -76,10 +80,22 @@ class PhotoShare(unittest.TestCase):
                     if process.poll() is not None: self.fail('Receiver failed to start')
                     try: status(); break
                     except OSError: time.sleep(.1)
+                for supplied in (None, '1', '0' * 64):
+                    headers = {'Origin': 'null'}
+                    if supplied: headers['X-AirTizen-Control'] = supplied
+                    req = urllib.request.Request('http://127.0.0.1:45110/status', headers=headers)
+                    with self.assertRaises(urllib.error.HTTPError) as failure: urllib.request.urlopen(req, timeout=2)
+                    self.assertEqual(failure.exception.code, 403)
+                # CORS preflight discloses no data and does not require the secret value.
+                with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:45110/status', method='OPTIONS', headers={'Origin':'null','Access-Control-Request-Headers':'X-AirTizen-Control'}), timeout=2) as preflight:
+                    self.assertEqual(preflight.status, 204)
                 with sync_playwright() as playwright:
                     browser = launch_browser(playwright)
                     page = browser.new_page(viewport={'width': 1920, 'height': 1080})
                     errors = []
+                    # Exercise the real token bootstrap against the host receiver.
+                    # Desktop Chrome cannot execute NaCl; fixed randomness here is a test fixture only.
+                    page.add_init_script('window.crypto.getRandomValues = function(a) { var hex=' + json.dumps(CONTROL_TOKEN) + '; for(var i=0;i<a.length;i++) a[i]=parseInt(hex.substr(i*2,2),16); return a; }; window.tizen={systeminfo:{getPropertyValue:function(n,ok){ok({ipAddress:"192.0.2.20"});}}};')
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.set_content('<iframe name="tv" sandbox="allow-scripts" style="width:1920px;height:1080px" src="http://127.0.0.1:' + str(server.server_port) + '/app/index.html"></iframe>')
                     ui = page.frame(name='tv')
@@ -87,7 +103,7 @@ class PhotoShare(unittest.TestCase):
                     self.assertEqual(photo(png()), 200)
                     expect(ui.locator('#photo-overlay')).to_be_visible()
                     expect(ui.locator('#photo-b')).to_have_js_property('naturalWidth', 32)
-                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status").then(r=>r.json()).then(s=>s.photo.ready)')
+                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status", {headers:{"X-AirTizen-Control":AirTizenControl.header()}}).then(r=>r.json()).then(s=>s.photo.ready)')
                     first = status()
                     # This exercises the photo-specific >1 MiB request allowance.
                     jpeg = (ROOT / 'tests/fixtures/photo.jpg').read_bytes() + b'\0' * (1024 * 1024)
@@ -134,9 +150,9 @@ class PhotoShare(unittest.TestCase):
                     # Header dimensions alone do not prove a decodable photo.
                     broken = bytes([255,216,255,192,0,17,8,0,2,0,3,3,1,17,0,2,17,0,3,17,0,255,217])
                     self.assertEqual(photo(broken, 'broken'), 200)
-                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status").then(r=>r.json()).then(s=>s.photo.failed)')
+                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status", {headers:{"X-AirTizen-Control":AirTizenControl.header()}}).then(r=>r.json()).then(s=>s.photo.failed)')
                     self.assertEqual(photo(png(), 'recovery'), 200)
-                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status").then(r=>r.json()).then(s=>s.photo.ready && !s.photo.failed)')
+                    ui.wait_for_function('fetch("http://127.0.0.1:45110/status", {headers:{"X-AirTizen-Control":AirTizenControl.header()}}).then(r=>r.json()).then(s=>s.photo.ready && !s.photo.failed)')
                     expect(ui.locator('#photo-overlay')).to_be_visible()
                     self.assertEqual(errors, [])
                     browser.close()

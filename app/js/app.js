@@ -53,7 +53,8 @@
     text('track-artist', [track.artist, track.album].filter(function (value) { return !!value; }).join(' · '));
     if ((track.artwork || 0) !== artwork) {
       artwork = track.artwork || 0;
-      $('cover-art').src = artwork ? 'http://127.0.0.1:45110/artwork/' + artwork : 'assets/airtizen-logo.png';
+      var artworkUrl = artwork ? 'http://127.0.0.1:45110/artwork/' + artwork : 'assets/airtizen-logo.png';
+      $('cover-art').src = artwork && window.AirTizenControl ? window.AirTizenControl.url(artworkUrl) : artworkUrl;
     }
     text('media-state', s.audio === 'playing' ? 'Playing audio' : s.audio === 'host_stub' ? 'Audio received by host test output' : 'Connected');
     var platform = window.AirTizenPlatform || {}, embedded = window.AirTizenEmbedded || {};

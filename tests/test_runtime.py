@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import socket
+import secrets
 import struct
 import subprocess
 import tempfile
@@ -335,6 +336,38 @@ class Runtime(unittest.TestCase):
             self.assertEqual(http('/start','POST',{'X-AirTizen-Control':'1'})[1]['service'], 'running')
             self.assertIn(b'200 OK', rtsp('OPTIONS'))
         self.assertEqual(http('/start','POST',{'X-AirTizen-Control':'1'})[1]['service'], 'running')
+
+
+class TokenControl(unittest.TestCase):
+    def test_runtime_requires_configured_nonce(self):
+        token=secrets.token_hex(32)
+        with tempfile.TemporaryFile() as log:
+            process=subprocess.Popen([str(BINARY)],stdout=log,stderr=log,env=dict(os.environ,AIRTIZEN_CONTROL_TOKEN=token))
+            try:
+                for _ in range(50):
+                    self.assertIsNone(process.poll())
+                    try:
+                        if http()[0]==403: break
+                    except OSError: time.sleep(.1)
+                self.assertEqual(http()[0],403)
+                self.assertEqual(http(headers={'Origin':'null','X-AirTizen-Control':'1'})[0],403)
+                self.assertEqual(http(headers={'X-AirTizen-Control':'0'*64})[0],403)
+                self.assertEqual(http(headers={'X-AirTizen-Control':token})[0],200)
+                self.assertEqual(http('/status?token='+token)[0],200)
+                self.assertEqual(http('/status?token='+'0'*64)[0],403)
+                self.assertEqual(http('/stop?token='+token,'POST',{'X-AirTizen-Control':'1'})[0],403)
+                self.assertEqual(http('/stop','POST',{'X-AirTizen-Control':token})[0],200)
+                self.assertEqual(http('/start','POST',{'X-AirTizen-Control':token})[0],200)
+                self.assertEqual(http(headers={'Origin':'https://foreign.invalid','X-AirTizen-Control':token})[0],403)
+                with urllib.request.urlopen(urllib.request.Request(BASE+'/status',method='OPTIONS',headers={'Origin':'null'}),timeout=2) as preflight:
+                    self.assertEqual(preflight.status,204)
+                self.assertNotIn(token,json.dumps(http(headers={'X-AirTizen-Control':token})[1]))
+            finally:
+                process.terminate();process.wait(timeout=5)
+            self.assertEqual(process.returncode,0)
+        for invalid in ('','0'*63,'x'*64):
+            result=subprocess.run([str(BINARY)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,env=dict(os.environ,AIRTIZEN_CONTROL_TOKEN=invalid),timeout=5)
+            self.assertNotEqual(result.returncode,0)
 
 
 if __name__ == '__main__':

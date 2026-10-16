@@ -7,6 +7,7 @@
   function request(path, binary, token, cb) {
     var xhr = new XMLHttpRequest(), done = false;
     xhr.open('GET', base + path, true); xhr.timeout = 2000;
+    if (global.AirTizenControl) global.AirTizenControl.authorize(xhr);
     if (binary) xhr.responseType = 'arraybuffer';
     function finish(error) {
       if (done) return; done = true;

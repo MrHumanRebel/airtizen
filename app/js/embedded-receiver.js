@@ -1,7 +1,12 @@
 /* Start the native receiver shipped inside this WGT; no separate ServiceApp. */
 (function (global) {
   'use strict';
-  var state = { phase: 'host', error: '' }, module;
+  var state = { phase: 'host', error: '' }, module, token = '';
+  global.AirTizenControl = {
+    header: function () { return token || '1'; },
+    authorize: function (xhr) { if (token) xhr.setRequestHeader('X-AirTizen-Control', token); },
+    url: function (value) { return token ? value + (value.indexOf('?') === -1 ? '?' : '&') + 'token=' + token : value; }
+  };
   function fail(message) { state.phase = 'failed'; state.error = message; }
   function validIp(ip) {
     var pieces = String(ip || '').split('.'), i;
@@ -21,6 +26,11 @@
     return result;
   }
   function launch(ip) {
+    var random = new Uint8Array(32), index;
+    if (!global.crypto || !global.crypto.getRandomValues) { fail('Secure random generation is unavailable on this TV.'); return; }
+    try { global.crypto.getRandomValues(random); }
+    catch (error) { fail('Secure receiver initialization failed.'); return; }
+    for (index = 0; index < random.length; index++) token += ('0' + random[index].toString(16)).slice(-2);
     var container = document.createElement('div');
     container.id = 'receiver-module'; container.style.position = 'absolute';
     container.style.width = '1px'; container.style.height = '1px';
@@ -30,6 +40,7 @@
     module = document.createElement('embed');
     module.setAttribute('type', 'application/x-nacl'); module.setAttribute('src', 'receiver/receiver.nmf');
     module.setAttribute('width', '1'); module.setAttribute('height', '1');
+    module.setAttribute('receiver-token', token);
     module.setAttribute('receiver-ip', ip); module.setAttribute('receiver-id', identity());
     module.setAttribute('receiver-name', 'AirTizen TV');
     state.phase = 'loading'; container.appendChild(module); document.body.appendChild(container);

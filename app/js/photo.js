@@ -5,7 +5,7 @@
   function report(value, failed) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://127.0.0.1:45110/photo/report?generation=' + value + '&failed=' + (failed ? 1 : 0), true);
-    xhr.timeout = 1500; xhr.setRequestHeader('X-AirTizen-Control', '1'); xhr.send(null);
+    xhr.timeout = 1500; xhr.setRequestHeader('X-AirTizen-Control', global.AirTizenControl ? global.AirTizenControl.header() : '1'); xhr.send(null);
   }
   function reset() {
     var i;
@@ -39,7 +39,8 @@
         report(token, true);
         if (global.AirTizenBridge) global.AirTizenBridge.log('The received photo could not be decoded by this TV');
       };
-      images[next].src = 'http://127.0.0.1:45110/photo/' + token;
+      var location = 'http://127.0.0.1:45110/photo/' + token;
+      images[next].src = global.AirTizenControl ? global.AirTizenControl.url(location) : location;
     },
     isActive: function () { return active; },
     stop: reset

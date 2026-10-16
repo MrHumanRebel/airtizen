@@ -1,0 +1,11 @@
+# WGT control-channel authentication
+
+At launch, the WGT generates 32 cryptographically random bytes using `crypto.getRandomValues`. It passes the hex token into the native module as an embed parameter. The native module rejects initialization without a correctly formed token and configures it before starting the loopback HTTP server. No persistent signing or pairing key is used as this token; it changes on each app load and is not stored in localStorage or included in status/log responses. Missing secure randomness fails initialization.
+
+All status, control and local media requests require the token. XHR requests carry `X-AirTizen-Control`; image elements use a trailing `token` query parameter because image requests cannot set custom headers. POST controls still require the header even if a URL token is supplied. Tokens are compared without a data-dependent early exit after length validation. Invalid/missing tokens return 403. Host and opaque-Origin validation remain enabled. OPTIONS can complete preflight without revealing data. Neither `Origin: null` nor the old header value `1` authenticates a token-protected instance.
+
+The query credential is confined to generated loopback image URLs. Do not include these URLs in diagnostics, external navigation, telemetry or shared screenshots. The local server does not log request URLs. Every script in the WGT is part of the trusted application; this mechanism does not defend against arbitrary code execution inside that application.
+
+The silent Linux development runtime retains its original header-only behavior by default. Set `AIRTIZEN_CONTROL_TOKEN` to 64 lowercase hex digits to exercise authenticated mode; malformed configuration exits before starting the receiver. `TokenControl` in `tests/test_runtime.py` tests missing/wrong/valid tokens, protected GET/POST, query access, Origin checks, preflight and invalid configuration, also under ASan/UBSan. The photo browser test uses this mode with a simulated bootstrap and actually fetches/decodes token-protected images and reports playback state. Desktop tests do not execute the NaCl module.
+
+This protects the WGT's loopback application channel. It does not implement PIN authorization, persistent Apple-device pairing, sender ownership or an AirPlay protocol security audit. Target-TV verification remains required.

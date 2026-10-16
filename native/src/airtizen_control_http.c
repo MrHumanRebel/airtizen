@@ -24,6 +24,16 @@
 static pthread_t g_thread;
 static int g_started, g_server_fd = -1, g_stop[2] = {-1, -1};
 static unsigned short g_port;
+static char g_token[65];
+int airtizen_control_http_set_token(const char *token){
+    size_t i;if(g_started || !token || strlen(token)!=64)return -1;
+    for(i=0;i<64;++i)if(!((token[i]>='0' && token[i]<='9') || (token[i]>='a' && token[i]<='f')))return -1;
+    memcpy(g_token,token,65);return 0;
+}
+static int token_equal(const char *value){
+    size_t i;unsigned different=0;if(!g_token[0] || !value || strlen(value)!=64)return 0;
+    for(i=0;i<64;++i)different|=(unsigned char)value[i]^(unsigned char)g_token[i];return different==0;
+}
 /* nacl_io does not implement SO_RCVTIMEO/SO_SNDTIMEO. Bound I/O with select. */
 static int wait_socket(int fd,int writing) {
     fd_set set;struct timeval timeout={1,0};int result;
@@ -64,7 +74,7 @@ static void handle_client(int fd) {
     char req[4096], method[16], path[256], version[16], expected_host[64];
     char *end, *line, *next;
     size_t used = 0;
-    int control = 0, host = 0, origin = 0, length_seen = 0;
+    int control = 0, control_seen=0, query_auth=0, host = 0, origin = 0, length_seen = 0;
     int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0,report_ended=0;
     int photo=0,photo_report=0,photo_failed=0;unsigned photo_generation=0;
     int artwork=0;unsigned artwork_version=0;
@@ -90,6 +100,10 @@ static void handle_client(int fd) {
             (strcmp(version, "HTTP/1.1") && strcmp(version, "HTTP/1.0"))) {
             respond(fd, "400 Bad Request", "{\"ok\":false}"); return;
         }
+    }
+    if(g_token[0]){
+        char *auth=strstr(path,"?token=");if(!auth)auth=strstr(path,"&token=");
+        if(auth){query_auth=token_equal(auth+7);*auth=0;}
     }
     if(!strncmp(path,"/playback/report?",17)) {
         int parsed=0;
@@ -125,17 +139,21 @@ static void handle_client(int fd) {
         } else if (!strcasecmp(line, "Origin")) {
             if (origin || strcmp(value, "null")) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"invalid_origin\"}"); return; }
             origin = 1;
-        } else if (!strcasecmp(line, "X-AirTizen-Control")) control = !strcmp(value, "1");
+        } else if (!strcasecmp(line, "X-AirTizen-Control")) {
+            if(control_seen++){respond(fd,"400 Bad Request","{\"ok\":false}");return;}
+            control=g_token[0]?token_equal(value):!strcmp(value,"1");
+        }
         else if (!strcasecmp(line, "Content-Length")) {
             if (length_seen || strcmp(value, "0")) { respond(fd, "413 Content Too Large", "{\"ok\":false}"); return; }
             length_seen = 1;
         } else if (!strcasecmp(line, "Transfer-Encoding")) { respond(fd, "400 Bad Request", "{\"ok\":false}"); return; }
     }
     if (!host) { respond(fd, "400 Bad Request", "{\"ok\":false,\"error\":\"missing_host\"}"); return; }
+    if(!strcmp(method,"OPTIONS")){respond(fd,"204 No Content","");return;}
+    if(g_token[0] && !control && !query_auth){respond(fd,"403 Forbidden","{\"ok\":false,\"error\":\"unauthorized\"}");return;}
     if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
         respond(fd, "404 Not Found", "{\"ok\":false,\"error\":\"not_found\"}"); return;
     }
-    if (!strcmp(method, "OPTIONS")) { respond(fd, "204 No Content", ""); return; }
     if(!strcmp(method,"GET") && photo){
         uint8_t *body=NULL;char mime[16];size_t size=airtizen_photo_copy(photo_generation,&body,mime);
         if(size)respond_bytes(fd,"200 OK",mime,body,size,photo_generation);else respond(fd,"404 Not Found","{\"ok\":false}");
@@ -171,8 +189,8 @@ static void handle_client(int fd) {
     }
     if (!strcmp(method, "POST") && (!strcmp(path, "/start") || !strcmp(path, "/stop"))) {
         int rc = 0;
-        /* Reject simple cross-origin forms. Opaque null origins are not authentication;
-         * a trusted app/service authorization channel is still a production requirement. */
+        /* Embedded mode requires the per-app token; development mode retains
+         * the custom-header check against simple cross-origin forms. */
         if (!control) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"control_header_required\"}"); return; }
         if (!strcmp(path, "/start")) rc = airtizen_runtime_start(NULL);
         else airtizen_runtime_stop();

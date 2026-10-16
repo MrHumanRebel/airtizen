@@ -9,6 +9,7 @@
 #include "airtizen_metadata.h"
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
@@ -114,6 +115,7 @@ static void stop_signal(int sig) { (void)sig; g_stop = 1; }
 int main(int argc, char **argv) {
     int rc;
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal); signal(SIGPIPE, SIG_IGN);
+    {const char *token=getenv("AIRTIZEN_CONTROL_TOKEN");if(token && airtizen_control_http_set_token(token)){fprintf(stderr,"invalid control token configuration\n");return 1;}}
     rc = airtizen_runtime_start(argc > 1 ? argv[1] : "AirTizen TV");
     if (rc != 0) { fprintf(stderr, "runtime start failed: %d\n", rc); return 1; }
     rc = airtizen_control_http_start(45110);
