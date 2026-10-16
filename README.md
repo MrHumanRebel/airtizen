@@ -46,6 +46,8 @@ The default build needs no signing secrets: it uses a stable public AirTizen com
 
 ## Samsung TV deployment
 
+The requested standalone product targets a native NaCl receiver bundled inside the WGT. Samsung documents this deployment mechanism for the older TV platform; the port is not implemented yet. See [single-WGT runtime research and prerequisites](docs/SINGLE_WGT_RUNTIME.md). The existing WGT-plus-TPK implementation below is the current experimental architecture, not the requested finished product.
+
 Sideloading requires enabling Samsung TV Developer Mode. The public SDK-signed package follows the community sideload path; if the TV rejects that distributor, use a Samsung distributor certificate authorizing the TV. Normal consumer mode alone does not provide an installation path. The current architecture requires separate WGT and native service TPK packages. The #8 research reports that TV hybrid WGT/TPK bundling did not install the service, and service startup on stock firmware remained unresolved. Later TCP reachability results are encouraging; they do not establish a working Tizen 3.0 receiver. Do not assume either that native service startup works or that inbound connections are universally blocked.
 
 The native source can be built with `AIRTIZEN_BUILD_TIZEN_SERVICE=ON` only with a compatible, device-tested Tizen native SDK providing `service-app`, `dlog` and `audio-io`. There is no verified TV TPK packaging pipeline yet. The MSE renderer must be tested against this TV’s browser, H.264 decoder and memory limits; desktop Chromium success does not prove Tizen support. A WASM/NaCl alternative must first demonstrate networking and hardware video/audio on this exact 2017 TV; desktop WASM support is insufficient evidence.
