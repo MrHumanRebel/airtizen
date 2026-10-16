@@ -132,7 +132,16 @@ clock_gettime(int X, struct timespec* tv)
 #endif // WIN32
 
 uint64_t now_us() {
+#ifdef __native_client__
+    extern uint64_t airtizen_nacl_now_us(void);
+    return airtizen_nacl_now_us();
+#else
     struct timespec time;
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time);
-    return (uint64_t)time.tv_sec * 10000000L + (uint64_t)(time.tv_nsec / 1000);
+#ifdef WIN32
+    if(clock_gettime(0,&time)!=0)return 0;
+#else
+    if(clock_gettime(CLOCK_MONOTONIC,&time)!=0)return 0;
+#endif
+    return (uint64_t)time.tv_sec * 1000000ULL + (uint64_t)(time.tv_nsec / 1000);
+#endif
 }

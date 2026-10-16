@@ -128,7 +128,7 @@ static void cb_audio_process(void *cls, pcm_data_struct *data, const char *name,
     g_state.connected = 1;
     snprintf(g_state.device, sizeof(g_state.device), "%s", name ? name : "AirPlay device");
     g_state.sample_rate = data->sample_rate; g_state.audio_bytes += length;
-#ifdef __TIZEN__
+#if defined(__TIZEN__) || defined(__native_client__)
     snprintf(g_state.audio, sizeof(g_state.audio), "playing");
 #else
     snprintf(g_state.audio, sizeof(g_state.audio), "host_stub");

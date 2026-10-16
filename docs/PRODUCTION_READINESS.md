@@ -9,13 +9,13 @@ Status: **experimental; production sign-off blocked**. Target confirmed by the p
 3. [UxPlay documentation](https://github.com/FDH2/UxPlay) describes a maintained mirroring/audio receiver using GStreamer and legacy AirPlay protocols, with limitations for non-mirror video and no Apple video DRM decryption. It is a candidate protocol reference or replacement core, not a drop-in Tizen renderer. Its GPLv3 obligations require review before importing code.
 4. [OpenAirPlay feature definitions](https://github.com/openairplay/airplay-spec/blob/master/src/features.md) distinguish audio, video, photos, mirroring, authentication, metadata and multiroom bits. Current advertisement includes the implemented audio, video, mirroring and metadata paths, excludes photo/DRM/multiroom claims, and `/info` uses the receiver's actual name, network identity and signing public key instead of a serialized donor AppleTV identity. Apple-device compatibility of this advertisement is unverified.
 
-The direct native route remains an experiment until a minimal signed service can start on the exact TV. Test that first, using an actual compatible SDK and certificate. Separately investigate the Samsung NaCl/WASM socket and media APIs available on the 2017 platform; do not assume a recent Moonlight build or standard browser WebAssembly works there. Keep a LAN companion route as a fallback if the direct platform probe fails; a relay alone does not implement media decoding, playback or synchronization.
+The receiver is now compiled into an ARM NaCl module inside the signed WGT. See [the implemented single-WGT route](SINGLE_WGT_RUNTIME.md). The official Pepper 47 toolchain builds the complete receiver and codecs; its sandbox validator accepts the binary. No separately installed native TPK or LAN companion is required by this architecture. Device execution and synchronized media remain unverified.
 
 ## Verified locally
 
 | Check | Evidence / limit |
 | --- | --- |
-| Native build | Host targets compile; generated donor copies do not rewrite unchanged outputs |
+| Native build | Host targets and Samsung ARM NaCl receiver compile; SDK sandbox validation passes; generated donor copies do not rewrite unchanged outputs |
 | AAC-LC / AAC-ELD | FDK-generated stereo frames pass through AES-encrypted RTP and the real decode queue; invalid AAC is dropped |
 | ALAC | Independent FFmpeg fixture produces byte-exact 16-bit PCM directly and through encrypted RTP; negotiated 44.1/48 kHz, mono/stereo boundaries are validated |
 | Mirroring transport | Fragmented TCP headers, bounded AVC configuration/access units, EOF/stop and AES-CTR keystream continuity across short packets tested |
@@ -23,10 +23,11 @@ The direct native route remains an experiment until a minimal signed service can
 | URL sharing | AirPlay HTTP play/rate/scrub/stop and reverse PTTH event/ack flow implemented; Chromium decodes MP4 video and audio, pauses, seeks and stops using actual native endpoints |
 | Music metadata | Bounded DMAP text, artwork/version handling and progress parsing tested; GUI displays peer text without HTML interpretation |
 | Pair verification | Independent Python client verifies receiver Ed25519 signature over X25519 keys and completes AES-CTR client signature exchange |
+| NaCl PCM queue | Bounded stereo/mono buffering, underrun silence and full-queue behavior tested; actual PPAPI output needs TV |
 | Audio boundary | Volume/mute, nonfinite gain rejection, partial writes and errors tested; Linux explicitly reports a silent host stub |
 | Protocol | Real-process tests cover fragmented requests, exact routes, Host/Origin/custom-header rules, size limits, parallel status, malformed RAOP, reverse events, mDNS and repeated stop/start |
 | UI | Chromium tests cover remote arrows/OK/Back, start/stop, hidden developer logs, bounds and peer-text injection |
-| Sanitizers | All seven CTest targets pass with ASan leak checking and UBSan halt-on-error; downloaded optimized FFmpeg is not sanitizer-instrumented |
+| Sanitizers | All nine CTest targets pass with ASan leak checking and UBSan halt-on-error; downloaded optimized FFmpeg is not sanitizer-instrumented |
 | Packaging | Real Web CLI build/sign with temporary 3072-bit development identities; both XML signatures verified cryptographically; a mutated RSA signature is rejected |
 | Release tooling | Numeric version ordering/distance/overflow, staged versions/source preservation, unsigned packages, incorrect versions and tampered payload rejection tested |
 
@@ -34,12 +35,12 @@ These tests establish host implementation behavior, not audible TV output, Apple
 
 ## Remaining production gates
 
-- **Native TV deployment:** obtain a reproducible Tizen 3.0-compatible toolchain/rootstrap and verify separate signed native-service TPK packaging, installation and startup on the UE65MU6100. The verified Web CLI is insufficient. The old native package-manager catalog could not be retrieved in this environment; no native TPK is claimed. TV Developer Mode is required for sideloading; public SDK signing follows the Jellyfin community build path but must be tested on this TV, with a Samsung device distributor used if required; consumer mode alone is insufficient.
+- **Native TV deployment:** install and execute the complete signed WGT on UE65MU6100; verify NaCl loader, inbound sockets/multicast, PPAPI audio and MSE playback. Developer Mode is required for sideloading; use an authorized Samsung distributor if public SDK signing is rejected. Cross-compilation and sandbox validation do not establish successful execution.
 - **Mirroring audio/video synchronization:** audio currently goes to the native output while video has an independent MSE buffer. Implement sender-clock mapping, coordinated playout, clock-drift correction, packet-loss recovery and discontinuity handling. Test resolution/rotation changes, B-frame assumptions, decoder recovery and memory limits on Tizen. Independent audio/video tests do not prove synchronized screen sharing.
 - **Sender interoperability:** test current iPhone/iPad/macOS discovery, FairPlay exchange, negotiated codec parameters, pause/flush/reconnect and URL sharing. Current support is the legacy AirPlay path; AirPlay 2 buffered audio, multiroom, photo sharing and DRM playback are not implemented. Legacy RSA/SDP ANNOUNCE audio is not implemented. URL playback depends on formats supported by the TV browser; HLS/AVPlay behavior is unverified.
 - **Authorization and session ownership:** implement persistent identity/pairing authorization or PIN policy, a trusted app/service control channel, media-session ownership, idle-client limits and systematic security/fuzz review. Opaque `null` origins and a custom HTTP header are not authentication. Existing input bounds and crypto fixes are not a full security audit.
-- **Licensing and native distribution:** complete the legacy donor provenance/license audit and include corresponding source, notices and required relinking material. PlayFair is GPLv3, FDK AAC has separate terms and downloaded FFmpeg is LGPL. The combined native binary is not MIT-only.
-- **Release infrastructure:** run GitHub Actions with the default public SDK sideload identity or optional configured credentials. Local community/SDK and configured-certificate success does not prove Samsung authorization or a successful hosted workflow. Keep releases experimental and WGT-only until the native package and acceptance gates pass.
+- **Licensing and native distribution:** complete the legacy donor provenance/license audit and include corresponding source, notices and required relinking material. PlayFair is GPLv3 and downloaded FFmpeg is LGPL; the production module no longer links FDK AAC (host test encoder only). Release artifacts include corresponding sources/build scripts and the WGT includes dependency notices. The combined native binary is not MIT-only.
+- **Release infrastructure:** run GitHub Actions with the default public SDK sideload identity or optional configured credentials. Local community/SDK and configured-certificate success does not prove Samsung authorization or a successful hosted workflow. Keep releases experimental until the device and feature acceptance gates pass.
 
 ## Physical-device acceptance matrix
 
@@ -47,7 +48,7 @@ Record TV firmware, sender model/OS, network topology and artifact commit/hash w
 
 | Scenario | Required outcome | Evidence still needed |
 | --- | --- | --- |
-| Install/update separate signed packages | Same-author upgrade works; native service starts on stock firmware in Developer Mode | TV / native TPK |
+| Install/update single signed WGT | Same-author upgrade works; embedded NaCl receiver starts in Developer Mode | TV / WGT |
 | Lifecycle | Start/stop/reconnect/app exit/standby/wake recover | TV |
 | iPhone/iPad/Mac discovery | Unique name/IP, no stale duplicate after stop | Apple sender / TV |
 | Pairing/access policy | Authorized sender connects; unauthorized access rejected | Authorization implementation / devices |

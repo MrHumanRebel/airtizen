@@ -113,7 +113,7 @@ netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp)
 
 		/* Initialize sockaddr for bind */
 		sin6ptr->sin6_family = family;
-		sin6ptr->sin6_addr = in6addr_any;
+		memset(&sin6ptr->sin6_addr, 0, sizeof(sin6ptr->sin6_addr));
 		sin6ptr->sin6_port = htons(*port);
 
 #ifndef WIN32

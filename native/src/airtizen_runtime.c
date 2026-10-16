@@ -85,7 +85,9 @@ const char *airtizen_runtime_status_json(void) {
         "\"status\":{\"mdns\":\"%s\",\"raop\":\"%s\",\"pair\":\"%s\",\"audio\":%s,\"connected\":%s,\"device\":%s,"
         "\"codec\":%s,\"rate\":\"%u\",\"buffer\":\"adaptive\",\"detail\":\"%s\",\"lastError\":%s},\"logs\":%s}",
         g_started ? "running" : g_error[0] ? "failed" : "offline", receiver,
-#ifdef __TIZEN__
+#if defined(__native_client__)
+        "nacl",
+#elif defined(__TIZEN__)
         "tizen",
 #else
         "host_stub",

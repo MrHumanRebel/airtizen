@@ -6,6 +6,8 @@
 extern "C" {
 #endif
 
+/* Set a sandbox-provided LAN address and stable local receiver identity before start. */
+int airtizen_mdns_set_network(const char *ipv4, const char *device_id);
 int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned short raop_port);
 void airtizen_mdns_stop(void);
 int airtizen_mdns_is_running(void);

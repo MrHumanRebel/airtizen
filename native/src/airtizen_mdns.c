@@ -10,9 +10,12 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
+#ifndef __native_client__
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
+#endif
 #include <sys/select.h>
 
 #define AIRTIZEN_MDNS_GROUP "224.0.0.251"
@@ -29,6 +32,19 @@ static char g_name[96] = "AirTizen TV";
 static char g_id[32] = "A1B2C3D4E5F6";
 static unsigned short g_port = 5000;
 static struct in_addr g_address;
+static int g_network_override;
+
+int airtizen_mdns_set_network(const char *ipv4,const char *id) {
+    struct in_addr address;size_t i;uint32_t host;
+    if(!ipv4 || !id || strlen(id)!=12 || inet_pton(AF_INET,ipv4,&address)!=1)return -1;
+    host=ntohl(address.s_addr);
+    if(!host || (host>>24)==127 || (host>>24)>=224 || host==0xffffffffU)return -1;
+    for(i=0;i<12;++i)if(!((id[i]>='0' && id[i]<='9') || (id[i]>='A' && id[i]<='F')))return -1;
+    pthread_mutex_lock(&g_identity_lock);
+    if(g_running){pthread_mutex_unlock(&g_identity_lock);return -1;}
+    g_address=address;memcpy(g_id,id,13);g_network_override=1;
+    pthread_mutex_unlock(&g_identity_lock);return 0;
+}
 
 static int u16(unsigned char *b, int p, unsigned short v) {
     b[p++] = (unsigned char)((v >> 8) & 255);
@@ -161,6 +177,10 @@ static int address_record(unsigned char *b, int p, const char *host) {
 }
 
 static int discover_local_address(void) {
+    if(g_network_override)return 0;
+#ifdef __native_client__
+    return -1; /* No Linux interface ioctls inside the NaCl sandbox. */
+#else
     struct ifaddrs *all, *it;
     int found = 0;
     if (getifaddrs(&all) != 0) return -1;
@@ -186,6 +206,7 @@ static int discover_local_address(void) {
     }
     freeifaddrs(all);
     return found ? 0 : -1;
+#endif
 }
 
 static int build_packet(unsigned char *b) {
@@ -286,7 +307,7 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
     struct sockaddr_in addr;
     struct ip_mreq membership;
     int yes = 1;
-    unsigned char ttl = 255;
+    unsigned int ttl = 255;
     if (g_running) return 0;
     if (!device_name || !*device_name || strlen(device_name) > 48) return -1;
     if (device_id) {

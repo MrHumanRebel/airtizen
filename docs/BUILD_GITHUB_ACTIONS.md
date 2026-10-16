@@ -37,7 +37,7 @@ Before upload, `verify-wgt.py` checks archive paths/duplicates, expanded size, r
 
 These checks do not establish Samsung certificate-chain trust, device authorization or successful installation. SHA256SUMS detects artifact corruption; it does not prove device compatibility.
 
-The current workflow releases the **WGT UI only**. It does not create a native service TPK and cannot be called a complete receiver release. Release notes explicitly state this limitation. Do not mark releases stable until the device acceptance criteria in PRODUCTION_READINESS.md pass.
+The `native-wgt` job cross-builds the actual ARM NaCl receiver on PRs and main, validates it using the Samsung SDK, tests incomplete/unsafe packages, and stages it inside the UI. The signing job consumes that payload and explicitly requires the embedded module before release. Corresponding receiver, FFmpeg and NaCl runtime source archives accompany the WGT. No separately installed TPK is required. TV execution and full protocol coverage remain unverified. Do not mark releases stable until the device acceptance criteria in PRODUCTION_READINESS.md pass.
 
 ## Headless signing regression
 

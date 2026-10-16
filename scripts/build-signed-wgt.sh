@@ -68,6 +68,7 @@ python3 "$GITHUB_WORKSPACE/scripts/sign-wgt.py" "$tizen_bin" "$stage_dir/.buildR
 mapfile -t packages < <(find "$output_dir" -maxdepth 1 -type f -name '*.wgt')
 if [ "${#packages[@]}" -ne 1 ]; then echo 'Expected exactly one signed WGT' >&2; exit 1; fi
 if [ "${packages[0]}" != "$output_dir/AirTizen.wgt" ]; then mv "${packages[0]}" "$output_dir/AirTizen.wgt"; fi
+if [ -s "$stage_dir/receiver/receiver.nmf" ]; then verify_options+=(--require-embedded-receiver); fi
 version="$(python3 - "$stage_dir/config.xml" <<'PY'
 import sys,xml.etree.ElementTree as ET
 print(ET.parse(sys.argv[1]).getroot().get('version'))

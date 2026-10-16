@@ -2,7 +2,7 @@
 
 An experimental AirPlay receiver for Samsung UE65MU6100 / Tizen 3.0, with a TV remote friendly web UI and a native receiver core.
 
-**Experimental: production acceptance on this TV is still outstanding.** The receiver implements encrypted ALAC/AAC audio, H.264 mirroring transport with a browser MSE renderer, music metadata/artwork, and HTTP URL video/audio sharing with playback controls. These paths have Linux/Chromium regression coverage. Real iPhone interoperability, Tizen 3.0 rendering and synchronized mirroring audio/video have not been established. AirPlay 2 multiroom, photo sharing and DRM playback are unsupported. The WGT requires a separately running native receiver; it is not a standalone receiver.
+**Experimental: production acceptance on this TV is still outstanding.** The receiver implements encrypted ALAC/AAC audio, H.264 mirroring transport with a browser MSE renderer, music metadata/artwork, and HTTP URL video/audio sharing with playback controls. These paths have Linux/Chromium regression coverage. Real iPhone interoperability, Tizen 3.0 rendering and synchronized mirroring audio/video have not been established. AirPlay 2 multiroom, photo sharing and DRM playback are unsupported. The WGT bundles the ARM NaCl receiver, codecs and PPAPI audio output; no separately installed native service or PC relay is required by this architecture. Execution on the target TV is not yet verified.
 
 ## Development
 
@@ -20,7 +20,7 @@ python3 tests/test_mirror_gui.py
 python3 tests/test_share_gui.py
 ```
 
-The seven CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
+The nine CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
 
 Media tests require H.264/AAC support. CI explicitly selects branded Chrome: Playwright’s bundled Chromium may lack these codecs. Alternatively set `CHROMIUM_EXECUTABLE` to a codec-enabled system browser; it takes precedence over `CHROMIUM_CHANNEL`. Missing codecs fail a preflight check and do not skip playback assertions.
 
@@ -42,13 +42,15 @@ The UI keeps diagnostics hidden by default. Settings → Developer mode exposes 
 
 GitHub Actions validates native code, browser behavior and release tooling. Successful main-branch builds then sign a staged WGT and publish an **experimental prerelease**, with automatic numeric versioning and SHA-256 checksums. A failed build, failed test or invalid configured signing identity blocks the release. There is no unsigned fallback and no forced tag update.
 
-The default build needs no signing secrets: it uses a stable public AirTizen community author and the SDK public distributor, like the Jellyfin sideload workflow. Optional private author and Samsung distributor identities are documented in [BUILD_GITHUB_ACTIONS.md](docs/BUILD_GITHUB_ACTIONS.md). `SIGNING-MODE.txt` identifies which mode produced the artifact. This workflow produces the web UI only; an installable native-service TPK is still a release blocker for the complete product.
+The default build needs no signing secrets: it uses a stable public AirTizen community author and the SDK public distributor, like the Jellyfin sideload workflow. Optional private author and Samsung distributor identities are documented in [BUILD_GITHUB_ACTIONS.md](docs/BUILD_GITHUB_ACTIONS.md). `SIGNING-MODE.txt` identifies which mode produced the artifact. The workflow cross-compiles and validates the ARM NaCl receiver, packages it with the UI, and refuses to release a WGT without that module. Dependency sources and notices accompany the release.
 
 ## Samsung TV deployment
 
-Sideloading requires enabling Samsung TV Developer Mode. The public SDK-signed package follows the community sideload path; if the TV rejects that distributor, use a Samsung distributor certificate authorizing the TV. Normal consumer mode alone does not provide an installation path. The current architecture requires separate WGT and native service TPK packages. The #8 research reports that TV hybrid WGT/TPK bundling did not install the service, and service startup on stock firmware remained unresolved. Later TCP reachability results are encouraging; they do not establish a working Tizen 3.0 receiver. Do not assume either that native service startup works or that inbound connections are universally blocked.
+The WGT contains `receiver/receiver.nmf` and the ARM `receiver_arm.nexe`. The UI obtains the TV LAN address, initializes the bundled receiver and reports loader failures in diagnostics. The native module supplies sockets, multicast discovery and PPAPI PCM output. See [the single-WGT implementation and build instructions](docs/SINGLE_WGT_RUNTIME.md).
 
-The native source can be built with `AIRTIZEN_BUILD_TIZEN_SERVICE=ON` only with a compatible, device-tested Tizen native SDK providing `service-app`, `dlog` and `audio-io`. There is no verified TV TPK packaging pipeline yet. The MSE renderer must be tested against this TV’s browser, H.264 decoder and memory limits; desktop Chromium success does not prove Tizen support. A WASM/NaCl alternative must first demonstrate networking and hardware video/audio on this exact 2017 TV; desktop WASM support is insufficient evidence.
+Sideloading requires Samsung TV Developer Mode. If the public SDK distributor is rejected, re-sign using an authorized Samsung distributor certificate. Consumer mode alone does not provide the sideload installation path. No native TPK or companion PC is required by this package.
+
+The actual NaCl loader, incoming connections, audible output and MSE playback must still be tested on UE65MU6100. Independent audio and video playback do not yet establish synchronized screen sharing. Keep releases experimental until the device acceptance matrix passes.
 
 See [production readiness and research](docs/PRODUCTION_READINESS.md) for evidence, outstanding work and the physical-device acceptance matrix. No signing credentials belong in source or chat.
 
