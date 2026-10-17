@@ -37,6 +37,7 @@ else
   if [ -n "${TIZEN_CERT_PASSWORD:-}" ] && [ "$TIZEN_CERT_PASSWORD" != 1234 ]; then
     echo 'Author password without an author P12: supply both, or use the public community default.' >&2; exit 1
   fi
+  python3 "$GITHUB_WORKSPACE/scripts/check-public-author.py" "$GITHUB_WORKSPACE/certificates/community-author.p12"
   cp "$GITHUB_WORKSPACE/certificates/community-author.p12" "$sign_dir/author.p12"
   export TIZEN_CERT_PASSWORD=1234
   author_mode=public-community-author
@@ -75,4 +76,7 @@ print(ET.parse(sys.argv[1]).getroot().get('version'))
 PY
 )"
 python3 "$GITHUB_WORKSPACE/scripts/verify-wgt.py" "$output_dir/AirTizen.wgt" "$version" "${verify_options[@]}"
+if [ "$author_mode" = public-community-author ]; then
+  python3 "$GITHUB_WORKSPACE/scripts/check-public-author.py" "$GITHUB_WORKSPACE/certificates/community-author.p12" --package "$output_dir/AirTizen.wgt"
+fi
 printf '%s\n%s\n' "$author_mode" "$distributor_mode" > "$output_dir/SIGNING-MODE.txt"
