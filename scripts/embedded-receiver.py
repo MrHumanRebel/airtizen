@@ -8,6 +8,7 @@ REQUIRED_SYMBOLS = frozenset({
     'PpapiPluginMain', 'main', 'airtizen_runtime_start',
     'airtizen_aac_create', 'airtizen_alac_create',
     'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
+    'airtizen_nacl_udp_multicast_v1',
 })
 
 

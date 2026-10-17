@@ -21,7 +21,8 @@ def check(module, sdk):
     required = {'PPP_InitializeModule', 'PPP_GetInterface', 'PPP_ShutdownModule',
                 'PpapiPluginMain', 'main', 'airtizen_runtime_start',
                 'airtizen_aac_create', 'airtizen_alac_create',
-                'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder'}
+                'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
+                'airtizen_nacl_udp_multicast_v1'}
     missing_runtime = required - all_symbols
     if missing_runtime:
         raise ValueError('Missing PPAPI receiver/codec symbols: ' + ', '.join(sorted(missing_runtime)))
@@ -59,7 +60,7 @@ def check(module, sdk):
             raise ValueError(name + ' does not call nacl_io (possible libc ENOSYS stub); check static library order')
         checked.append(name)
     print('Verified ARM nacl_io dispatch: ' + ', '.join(checked))
-    print('Verified PPAPI launcher, receiver runtime and static AAC/ALAC/H.264 decoders')
+    print('Verified PPAPI launcher, receiver, static AAC/ALAC/H.264 decoders and corrected Samsung UDP runtime')
 
 
 if __name__ == '__main__':
