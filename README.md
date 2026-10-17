@@ -45,6 +45,8 @@ GitHub Actions validates native code, browser behavior and release tooling. Succ
 
 The default build needs no signing secrets: it uses a stable public AirTizen community author and the SDK public distributor, like the Jellyfin sideload workflow. Optional private author and Samsung distributor identities are documented in [BUILD_GITHUB_ACTIONS.md](docs/BUILD_GITHUB_ACTIONS.md). `SIGNING-MODE.txt` identifies which mode produced the artifact. The workflow cross-compiles and validates the ARM NaCl receiver, packages it with the UI, and refuses to release a WGT without that module. Dependency sources and notices accompany the release.
 
+For installation failure `118`, see [TV installation troubleshooting](docs/TV_INSTALL_TROUBLESHOOTING.md).
+
 ## Samsung TV deployment
 
 The WGT contains `receiver/receiver.nmf` and the ARM `receiver_arm.nexe`. The UI obtains the TV LAN address, initializes the bundled receiver and reports loader failures in diagnostics. The native module supplies sockets, multicast discovery and PPAPI PCM output. See [the single-WGT implementation and build instructions](docs/SINGLE_WGT_RUNTIME.md).

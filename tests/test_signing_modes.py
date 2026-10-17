@@ -94,7 +94,8 @@ class Signing(unittest.TestCase):
 
     def test_configured_certificates_keep_strict_policy(self):
         encoded = base64.b64encode(self.public.read_bytes()).decode()
-        # Test fixture only: both roles use a strong self-signed public test key.
+        # Integrity-policy fixture only: both roles use this strong public test key.
+        # This fixture does not establish distributor trust on a TV.
         self.env.update(TIZEN_CERT_P12_BASE64=encoded, TIZEN_CERT_PASSWORD='1234',
                         TIZEN_DISTRIBUTOR_P12_BASE64=encoded, TIZEN_DISTRIBUTOR_PASSWORD='1234')
         result = self.build()
