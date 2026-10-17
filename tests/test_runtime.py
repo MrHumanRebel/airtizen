@@ -134,6 +134,7 @@ class Runtime(unittest.TestCase):
 
     def test_foreign_origin_rejected(self):
         self.assertEqual(http('/stop', 'POST', {'Origin': 'https://untrusted.example', 'X-AirTizen-Control': '1'})[0], 403)
+        self.assertEqual(http('/stop', 'POST', {'Origin': 'file://', 'X-AirTizen-Control': '1'})[0], 403)
 
     def test_host_rebinding_rejected(self):
         response = wire(b'GET /status HTTP/1.1\r\nHost: untrusted.example:45110\r\n\r\n')
@@ -358,6 +359,24 @@ class TokenControl(unittest.TestCase):
                 self.assertEqual(http('/stop?token='+token,'POST',{'X-AirTizen-Control':'1'})[0],403)
                 self.assertEqual(http('/stop','POST',{'X-AirTizen-Control':token})[0],200)
                 self.assertEqual(http('/start','POST',{'X-AirTizen-Control':token})[0],200)
+                # Tizen 3 WebKit's local-file POST origin still requires the
+                # private nonce; CORS must echo the exact accepted origin.
+                self.assertEqual(http('/stop','POST',{'Origin':'file://'})[0],403)
+                self.assertEqual(http('/stop','POST',{'Origin':'file://','X-AirTizen-Control':'1'})[0],403)
+                self.assertEqual(http('/stop','POST',{'Origin':'file://','X-AirTizen-Control':token})[0],200)
+                request=urllib.request.Request(BASE+'/start',method='POST',headers={'Origin':'file://','X-AirTizen-Control':token})
+                with urllib.request.urlopen(request,timeout=5) as response:
+                    self.assertEqual(response.headers['Access-Control-Allow-Origin'],'file://')
+                    self.assertEqual(json.load(response)['service'],'running')
+                with urllib.request.urlopen(urllib.request.Request(BASE+'/status',headers={'Origin':'null','X-AirTizen-Control':token}),timeout=5) as response:
+                    self.assertEqual(response.headers['Access-Control-Allow-Origin'],'null')
+                for bad in ('file:///untrusted','file://foreign','https://foreign.invalid'):
+                    self.assertEqual(http(headers={'Origin':bad,'X-AirTizen-Control':token})[0],403)
+                duplicate=('POST /stop HTTP/1.1\r\nHost: 127.0.0.1:45110\r\nOrigin: file://\r\nOrigin: null\r\nX-AirTizen-Control: '+token+'\r\nContent-Length: 0\r\n\r\n').encode()
+                self.assertIn(b'403 Forbidden',wire(duplicate))
+                with urllib.request.urlopen(urllib.request.Request(BASE+'/start',method='OPTIONS',headers={'Origin':'file://'}),timeout=5) as preflight:
+                    self.assertEqual(preflight.status,204)
+                    self.assertEqual(preflight.headers['Access-Control-Allow-Origin'],'file://')
                 self.assertEqual(http(headers={'Origin':'https://foreign.invalid','X-AirTizen-Control':token})[0],403)
                 with urllib.request.urlopen(urllib.request.Request(BASE+'/status',method='OPTIONS',headers={'Origin':'null'}),timeout=2) as preflight:
                     self.assertEqual(preflight.status,204)
