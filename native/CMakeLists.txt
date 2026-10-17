@@ -114,7 +114,12 @@ if(AIRTIZEN_BUILD_NACL_MODULE)
   set_target_properties(airtizen_receiver PROPERTIES SUFFIX ".nexe")
   target_include_directories(airtizen_receiver PRIVATE "${NACL_SDK}/include" nacl)
   target_link_directories(airtizen_receiver PRIVATE "${NACL_SDK}/lib/clang-newlib_arm/Release")
-  target_link_libraries(airtizen_receiver PRIVATE airtizen_runtime_lib nacl_io ppapi_cpp ppapi pthread)
+  # Socket references also originate in airtizen_core. Listing nacl_io only on
+  # the executable placed it BEFORE that static archive, so newlib's ENOSYS
+  # stubs silently satisfied getsockname/getaddrinfo/recvfrom/sendto instead.
+  # Express the dependency where it originates, after every receiver archive.
+  target_link_libraries(airtizen_core PUBLIC nacl_io ppapi_cpp ppapi pthread)
+  target_link_libraries(airtizen_receiver PRIVATE airtizen_runtime_lib)
 else()
   add_executable(airtizen_runtime src/airtizen_runtime.c src/airtizen_control_http.c)
   target_link_libraries(airtizen_runtime PRIVATE airtizen_core Threads::Threads)

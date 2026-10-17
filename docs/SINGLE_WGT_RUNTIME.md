@@ -20,7 +20,7 @@ Sources inspected on 2026-10-16:
 
 ## Implemented package and build
 
-The WGT now contains the UI, a generated ARM `.nmf`, and the actual native `.nexe`. It is cross-compiled using the official Pepper 47 LLVM toolchain and passes the SDK's `ncval` sandbox validator before and after stripping debug data. The ELF structural/package checks reject host executables, missing modules and external module URLs. This validates build/package integrity, not device execution.
+The WGT now contains the UI, a generated ARM `.nmf`, and the actual native `.nexe`. It is cross-compiled using the official Pepper 47 LLVM toolchain and passes the SDK's `ncval` sandbox validator before and after stripping debug data. The ELF structural/package checks reject host executables, missing modules and external module URLs. This validates build/package integrity. The user’s Tizen 3.0 photos additionally confirm installation, module loading and loopback status, while showing a receiver startup failure. See [the socket-link fix and retest](TV_STARTUP_TROUBLESHOOTING.md).
 
 The module initializes `nacl_io`, starts the receiver/control server from a worker thread, and uses PPAPI Audio with a bounded PCM queue. TV `systeminfo` supplies the LAN address; a stable local receiver identifier replaces Linux interface/MAC ioctls. The TV manifest uses `tv-samsung` and the documented public-network privilege. HTTP readiness waits and UDP timing-thread shutdown avoid reliance on socket timeouts missing from this SDK.
 

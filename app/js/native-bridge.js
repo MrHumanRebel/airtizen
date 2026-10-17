@@ -47,7 +47,14 @@
       done = true;
       clearTimeout(timer);
       if (xhr.status < 200 || xhr.status >= 300) {
-        cb({ ok:false, error:'runtime HTTP ' + xhr.status });
+        var reason = '';
+        try {
+          var failure = JSON.parse(xhr.responseText || '{}');
+          // Show only machine error identifiers, never arbitrary response data
+          // or request headers (which contain the private control nonce).
+          if (failure && typeof failure.error === 'string' && /^[a-z_]{1,64}$/.test(failure.error)) reason = ' (' + failure.error + ')';
+        } catch (ignoreJSON) {}
+        cb({ ok:false, error:'runtime HTTP ' + xhr.status + reason });
         return;
       }
       var parsed;

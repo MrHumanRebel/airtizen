@@ -142,5 +142,17 @@ class GUI(unittest.TestCase):
             self.assertLessEqual(box['y']+box['height'],1080)
         self.assertIsNone(self.ui.evaluate('window.injected'))
 
+    def test_control_error_reason_is_visible_without_response_secrets(self):
+        endpoint='http://127.0.0.1:45110/start'
+        def reject(route):
+            route.fulfill(status=403,headers={'Access-Control-Allow-Origin':'null'},
+                          content_type='application/json',body='{"ok":false,"error":"invalid_origin","token":"never-log-me"}')
+        self.page.route(endpoint,reject)
+        result=self.ui.evaluate('''() => new Promise(resolve => AirTizenBridge.start(resolve))''')
+        self.assertEqual(result['error'],'runtime HTTP 403 (invalid_origin)')
+        status=self.ui.evaluate('''() => new Promise(resolve => AirTizenBridge.status(resolve))''')
+        self.assertIn('start failed: runtime HTTP 403 (invalid_origin)',status['log'])
+        self.assertNotIn('never-log-me',status['log'])
+
 if __name__=='__main__':
     unittest.main(verbosity=2)

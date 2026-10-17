@@ -39,13 +39,13 @@
     running = res.ok && res.service === 'running';
     lastResult = res;
     text('receiver-name', res.receiverName || 'AirTizen TV');
-    text('hero-status', !res.ok ? 'Receiver unavailable' : s.connected ? 'You’re connected' : running ? (caps.audioOutput === 'host_stub' ? 'Receiver test mode' : 'Audio service running') : 'Receiver stopped');
+    text('hero-status', !res.ok ? 'Receiver unavailable' : res.service === 'failed' ? 'Receiver startup failed' : s.connected ? 'You’re connected' : running ? (caps.audioOutput === 'host_stub' ? 'Receiver test mode' : 'Audio service running') : 'Receiver stopped');
     text('hero-detail', s.detail || 'Open diagnostics to check the receiver service.');
     text('receiver-action', running ? 'Stop receiver' : 'Start receiver');
     $('receiver-action').setAttribute('data-action', running ? 'stop' : 'start');
     text('connection-state', res.ok ? (running ? 'Service connected' : 'Service stopped') : 'Service unavailable');
     $('connection-state').className = running ? 'online' : '';
-    text('capability-note', caps.mirroring ? (caps.photos ? 'Screen mirroring, music, video and photos' : 'Screen mirroring and audio') : 'Audio receiver · Screen mirroring is not available in this build.');
+    text('capability-note', !res.ok ? 'Waiting for receiver capabilities. Open diagnostics for connection errors.' : caps.mirroring ? (caps.photos ? 'Screen mirroring, music, video and photos' : 'Screen mirroring and audio') : 'Audio receiver · Screen mirroring is not available in this build.');
     if (caps.audioOutput === 'host_stub') text('capability-note', 'Host test mode · Audio output is silent; video uses the browser decoder.');
     visible($('now'), !!s.connected);
     text('device-name', s.device || 'AirPlay device');

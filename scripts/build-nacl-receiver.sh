@@ -13,6 +13,7 @@ cmake -S "$root/native" -B "$build" -DCMAKE_TOOLCHAIN_FILE="$root/native/nacl/to
   -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE="$(command -v python3)"
 cmake --build "$build" -j"${JOBS:-2}"
 module="$build/airtizen_receiver.nexe"
+python3 "$root/scripts/check-nacl-sockets.py" "$module"
 "$NACL_SDK_ROOT/tools/ncval" "$module"
 "$NACL_SDK_ROOT/toolchain/linux_pnacl/bin/arm-nacl-strip" --strip-debug "$module"
 "$NACL_SDK_ROOT/tools/ncval" "$module"

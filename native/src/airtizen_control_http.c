@@ -25,6 +25,8 @@ static pthread_t g_thread;
 static int g_started, g_server_fd = -1, g_stop[2] = {-1, -1};
 static unsigned short g_port;
 static char g_token[65];
+/* Only the single HTTP worker uses this value; reset for each connection. */
+static const char *g_response_origin = "null";
 int airtizen_control_http_set_token(const char *token){
     size_t i;if(g_started || !token || strlen(token)!=64)return -1;
     for(i=0;i<64;++i)if(!((token[i]>='0' && token[i]<='9') || (token[i]>='a' && token[i]<='f')))return -1;
@@ -58,12 +60,12 @@ static void respond_bytes(int fd,const char *status,const char *type,const void 
     char header[1024];
     int n=snprintf(header,sizeof(header),
         "HTTP/1.1 %s\r\nContent-Type: %s\r\n"
-        "Access-Control-Allow-Origin: null\r\nVary: Origin\r\n"
+        "Access-Control-Allow-Origin: %s\r\nVary: Origin\r\n"
         "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
         "Access-Control-Allow-Headers: X-AirTizen-Control\r\n"
         "Access-Control-Expose-Headers: X-AirTizen-Generation\r\n"
         "X-AirTizen-Generation: %u\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
-        "Connection: close\r\nContent-Length: %zu\r\n\r\n",status,type,generation,size);
+        "Connection: close\r\nContent-Length: %zu\r\n\r\n",status,type,g_response_origin,generation,size);
     if(n>0 && (size_t)n<sizeof(header) && send_all(fd,header,(size_t)n)==0 && size)
         send_all(fd,body,size);
 }
@@ -80,6 +82,7 @@ static void handle_client(int fd) {
     int artwork=0;unsigned artwork_version=0;
     int media_init=0,media_segment=0;uint64_t media_sequence=0;
     struct timeval timeout = {1, 0};
+    g_response_origin = "null";
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     req[0] = 0;
@@ -137,7 +140,11 @@ static void handle_client(int fd) {
             if (host || strcmp(value, expected_host)) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"invalid_host\"}"); return; }
             host = 1;
         } else if (!strcasecmp(line, "Origin")) {
-            if (origin || strcmp(value, "null")) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"invalid_origin\"}"); return; }
+            /* Legacy TV WebKit serializes a local WGT origin as file:// on
+             * POST. Permit that exact literal only with nonce authentication;
+             * never trust file origins in the host's header-only test mode. */
+            if (origin || (strcmp(value, "null") && !(g_token[0] && !strcmp(value, "file://")))) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"invalid_origin\"}"); return; }
+            if (!strcmp(value, "file://")) g_response_origin = "file://";
             origin = 1;
         } else if (!strcasecmp(line, "X-AirTizen-Control")) {
             if(control_seen++){respond(fd,"400 Bad Request","{\"ok\":false}");return;}
