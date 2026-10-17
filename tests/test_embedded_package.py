@@ -1,5 +1,6 @@
 """Exercise the real ARM receiver payload and reject incomplete/external bundles."""
 import importlib.util
+import struct
 from pathlib import Path
 import sys
 import tempfile
@@ -21,6 +22,26 @@ staging = load('stage-web')
 
 
 class EmbeddedPackage(unittest.TestCase):
+    def test_rejects_missing_receiver_or_codec_definitions(self):
+        self.assertIsNotNone(MODULE)
+        data = MODULE.read_bytes()
+        embedded.check_module(data)
+        # Preserve valid ARM executable structure while removing one actual
+        # symbol name, reproducing the hole in the old structural-only check.
+        for name in sorted(embedded.REQUIRED_SYMBOLS):
+            original = name.encode() + b'\0'
+            self.assertIn(original, data)
+            changed = data.replace(original, b'X' + original[1:])
+            with self.subTest(symbol=name), self.assertRaisesRegex(ValueError, 'Missing bundled'):
+                embedded.check_module(changed)
+
+    def test_rejects_dynamic_receiver(self):
+        data = bytearray(MODULE.read_bytes())
+        offset = struct.unpack_from('<I', data, 28)[0]
+        struct.pack_into('<I', data, offset, 2)
+        with self.assertRaisesRegex(ValueError, 'statically linked'):
+            embedded.check_module(data)
+
     def test_real_arm_payload_and_missing_files(self):
         self.assertIsNotNone(MODULE, 'Pass the actual SDK-validated ARM receiver path')
         with tempfile.TemporaryDirectory() as temp:
