@@ -50,9 +50,10 @@
         var reason = '';
         try {
           var failure = JSON.parse(xhr.responseText || '{}');
+          var errorCode = failure && (failure.error || (failure.status && failure.status.lastError));
           // Show only machine error identifiers, never arbitrary response data
           // or request headers (which contain the private control nonce).
-          if (failure && typeof failure.error === 'string' && /^[a-z_]{1,64}$/.test(failure.error)) reason = ' (' + failure.error + ')';
+          if (typeof errorCode === 'string' && /^[a-z_][a-z0-9_]{0,95}$/.test(errorCode)) reason = ' (' + errorCode + ')';
         } catch (ignoreJSON) {}
         cb({ ok:false, error:'runtime HTTP ' + xhr.status + reason });
         return;

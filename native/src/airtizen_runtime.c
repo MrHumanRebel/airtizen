@@ -38,7 +38,7 @@ int airtizen_runtime_start(const char *device_name) {
         rc = airtizen_mdns_start(name, NULL, 5000);
         if (rc != 0) {
             airtizen_core_stop();
-            snprintf(g_error, sizeof(g_error), "mdns_start_failed");
+            snprintf(g_error, sizeof(g_error), "%s", airtizen_mdns_last_error()[0] ? airtizen_mdns_last_error() : "mdns_start_failed");
         } else g_started = 1;
     }
     pthread_mutex_unlock(&g_lock);

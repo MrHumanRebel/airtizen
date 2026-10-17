@@ -118,11 +118,15 @@ if(AIRTIZEN_BUILD_NACL_MODULE)
   # the executable placed it BEFORE that static archive, so newlib's ENOSYS
   # stubs silently satisfied getsockname/getaddrinfo/recvfrom/sendto instead.
   # Express the dependency where it originates, after every receiver archive.
-  target_link_libraries(airtizen_core PUBLIC nacl_io ppapi_cpp ppapi pthread)
+  set(AIRTIZEN_NACL_IO_LIBRARY "" CACHE FILEPATH "Pepper47 runtime with Samsung UDP fixes")
+  if(NOT EXISTS "${AIRTIZEN_NACL_IO_LIBRARY}")
+    message(FATAL_ERROR "Build the corrected UDP runtime using scripts/build-nacl-receiver.sh")
+  endif()
+  target_link_libraries(airtizen_core PUBLIC "${AIRTIZEN_NACL_IO_LIBRARY}" ppapi_cpp ppapi pthread)
   target_link_libraries(airtizen_receiver PRIVATE airtizen_runtime_lib)
   # Keep the browser entry points as explicit roots even with section GC/LTO.
   target_link_options(airtizen_receiver PRIVATE
-    "-Wl,--undefined=PPP_InitializeModule,--undefined=PPP_GetInterface,--undefined=PPP_ShutdownModule")
+    "-Wl,--undefined=PPP_InitializeModule,--undefined=PPP_GetInterface,--undefined=PPP_ShutdownModule,--undefined=airtizen_nacl_udp_multicast_v1")
 else()
   add_executable(airtizen_runtime src/airtizen_runtime.c src/airtizen_control_http.c)
   target_link_libraries(airtizen_runtime PRIVATE airtizen_core Threads::Threads)

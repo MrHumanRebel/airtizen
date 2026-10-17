@@ -1,5 +1,41 @@
 # UE65MU6100: installed WGT, receiver startup failure
 
+## 2.2.27: RAOP starts, then mDNS startup fails
+
+The next physical-TV photos confirm `Embedded receiver: loaded`, initialized
+server sockets and `RAOP listener started`. Startup then stops the receiver
+because discovery reports `mdns_start_failed`. The photos do not identify the
+failing mDNS socket operation.
+
+Two reproducible defects exist in the pinned Pepper47 UDP implementation:
+
+- The Samsung UDP 1.0 wrapper calls `SetMulticastMembership` with the group and
+  local-interface resources reversed. This violates the SDK's own
+  `PP_MulticastMembership` ABI for both joining and leaving a multicast group.
+- `SO_REUSEADDR` returns success through the generic socket base without
+  actually forwarding `PP_UDPSOCKET_OPTION_ADDRESS_REUSE` to the browser. The
+  mDNS bind therefore cannot share UDP5353 with existing platform responders.
+
+`prepare-nacl-udp.py` repairs a build copy of the verified SDK source;
+`build-nacl-io.sh` recompiles its UDP object and replaces that member in a
+separate static runtime archive. The downloaded SDK is not modified. The ARM
+receiver links this corrected archive and retains a versioned UDP compatibility
+symbol, required again by the independent package validator. The complete
+corrected runtime ships inside the WGT. Source archives include the original
+SDK and the repair/build scripts needed to reproduce it.
+
+`test_samsung_udp.py` executes the actual SDK method bodies against a strict
+PPAPI boundary. The original methods fail both address-contract and port-reuse
+checks; repaired methods pass and propagate browser errors. These tests execute
+on the build host, not on the physical TV. Actual multicast membership and
+iPhone discovery still need the new package's physical retest.
+
+Startup now reports the exact failing step and errno, for example
+`mdns_bind_5353_failed_errno_98` or `mdns_join_group_failed_errno_22`, rather
+than only `mdns_start_failed`. HTTP503 diagnostics preserve this code. A
+failed multicast setup still fails startup; the fix does not falsely label an
+undiscoverable receiver as working.
+
 ## 2.2.26 regression: Nexe crashed during startup
 
 The follow-up TV photos show `Nexe crashed during startup` before loopback

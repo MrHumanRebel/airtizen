@@ -33,6 +33,11 @@ static char g_id[32] = "A1B2C3D4E5F6";
 static unsigned short g_port = 5000;
 static struct in_addr g_address;
 static int g_network_override;
+static char g_start_error[80];
+const char *airtizen_mdns_last_error(void) { return g_start_error; }
+static void start_error(const char *stage, int error) {
+    snprintf(g_start_error, sizeof(g_start_error), "mdns_%s_failed_errno_%d", stage, error);
+}
 
 int airtizen_mdns_set_network(const char *ipv4,const char *id) {
     struct in_addr address;size_t i;uint32_t host;
@@ -309,6 +314,7 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
     int yes = 1;
     unsigned int ttl = 255;
     if (g_running) return 0;
+    g_start_error[0] = 0;
     if (!device_name || !*device_name || strlen(device_name) > 48) return -1;
     if (device_id) {
         size_t i;
@@ -318,26 +324,33 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
                   (device_id[i] >= 'A' && device_id[i] <= 'F'))) return -1;
     }
     pthread_mutex_lock(&g_identity_lock);
-    if (discover_local_address() != 0) { pthread_mutex_unlock(&g_identity_lock); return -1; }
+    if (discover_local_address() != 0) { start_error("network", errno); pthread_mutex_unlock(&g_identity_lock); return -1; }
     if (device_id) snprintf(g_id, sizeof(g_id), "%s", device_id);
     snprintf(g_name, sizeof(g_name), "%s", device_name);
     pthread_mutex_unlock(&g_identity_lock);
     g_port = raop_port ? raop_port : 5000;
     g_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (g_sock < 0) return -1;
-    if (setsockopt(g_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) goto failed;
+    if (g_sock < 0) { start_error("udp_socket", errno); return -1; }
+    if (setsockopt(g_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) { start_error("reuseaddr", errno); goto failed; }
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET; addr.sin_port = htons(AIRTIZEN_MDNS_PORT);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(g_sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) goto failed;
+    if (bind(g_sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) { start_error("bind_5353", errno); goto failed; }
     memset(&membership, 0, sizeof(membership));
     inet_pton(AF_INET, AIRTIZEN_MDNS_GROUP, &membership.imr_multiaddr);
     membership.imr_interface = g_address;
-    if (setsockopt(g_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership, sizeof(membership)) != 0 ||
-        setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_IF, &g_address, sizeof(g_address)) != 0 ||
-        setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) != 0) goto failed;
-    if (pipe(g_stop) != 0) goto failed;
-    if (pthread_create(&g_thread, NULL, loop, NULL) != 0) goto failed;
+    if (setsockopt(g_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership, sizeof(membership)) != 0) {
+        start_error("join_group", errno); goto failed;
+    }
+    if (setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_IF, &g_address, sizeof(g_address)) != 0) {
+        start_error("interface", errno); goto failed;
+    }
+    if (setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) != 0) {
+        start_error("ttl", errno); goto failed;
+    }
+    if (pipe(g_stop) != 0) { start_error("stop_pipe", errno); goto failed; }
+    { int error = pthread_create(&g_thread, NULL, loop, NULL);
+      if (error != 0) { start_error("worker", error); goto failed; } }
     g_running = 1;
     return 0;
 failed:

@@ -153,6 +153,12 @@ class GUI(unittest.TestCase):
         status=self.ui.evaluate('''() => new Promise(resolve => AirTizenBridge.status(resolve))''')
         self.assertIn('start failed: runtime HTTP 403 (invalid_origin)',status['log'])
         self.assertNotIn('never-log-me',status['log'])
+        self.page.unroute(endpoint,reject)
+        self.page.route(endpoint,lambda route: route.fulfill(status=503,
+            headers={'Access-Control-Allow-Origin':'null'},content_type='application/json',
+            body='{"ok":true,"status":{"lastError":"mdns_bind_5353_failed_errno_98"}}'))
+        result=self.ui.evaluate('''() => new Promise(resolve => AirTizenBridge.start(resolve))''')
+        self.assertEqual(result['error'],'runtime HTTP 503 (mdns_bind_5353_failed_errno_98)')
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
