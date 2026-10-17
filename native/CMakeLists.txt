@@ -120,6 +120,9 @@ if(AIRTIZEN_BUILD_NACL_MODULE)
   # Express the dependency where it originates, after every receiver archive.
   target_link_libraries(airtizen_core PUBLIC nacl_io ppapi_cpp ppapi pthread)
   target_link_libraries(airtizen_receiver PRIVATE airtizen_runtime_lib)
+  # Keep the browser entry points as explicit roots even with section GC/LTO.
+  target_link_options(airtizen_receiver PRIVATE
+    "-Wl,--undefined=PPP_InitializeModule,--undefined=PPP_GetInterface,--undefined=PPP_ShutdownModule")
 else()
   add_executable(airtizen_runtime src/airtizen_runtime.c src/airtizen_control_http.c)
   target_link_libraries(airtizen_runtime PRIVATE airtizen_core Threads::Threads)
