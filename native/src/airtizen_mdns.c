@@ -332,6 +332,11 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
     g_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (g_sock < 0) { start_error("udp_socket", errno); return -1; }
     if (setsockopt(g_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) { start_error("reuseaddr", errno); goto failed; }
+    /* PPAPI UDP 1.2 requires multicast TTL to be set before Bind(). Linux
+     * allows the opposite order, which hid this error in host socket tests. */
+    if (setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) != 0) {
+        start_error("ttl", errno); goto failed;
+    }
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET; addr.sin_port = htons(AIRTIZEN_MDNS_PORT);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -344,9 +349,6 @@ int airtizen_mdns_start(const char *device_name, const char *device_id, unsigned
     }
     if (setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_IF, &g_address, sizeof(g_address)) != 0) {
         start_error("interface", errno); goto failed;
-    }
-    if (setsockopt(g_sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) != 0) {
-        start_error("ttl", errno); goto failed;
     }
     if (pipe(g_stop) != 0) { start_error("stop_pipe", errno); goto failed; }
     { int error = pthread_create(&g_thread, NULL, loop, NULL);

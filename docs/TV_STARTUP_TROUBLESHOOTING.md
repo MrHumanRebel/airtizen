@@ -1,4 +1,33 @@
-# UE65MU6100: installed WGT, receiver startup failure
+# Samsung Tizen 3.0 receiver startup failures
+
+## 2.2.28: multicast TTL is set after binding
+
+[Issue #20](https://github.com/MrHumanRebel/airtizen/issues/20) reports
+`mdns_ttl_failed_errno_1` on QA75Q8CAMJXXZ (QLED Q8C), Tizen 3.0,
+WebKit 538.1. NaCl loading, socket creation, RAOP listening, UDP5353 binding
+and group membership have already succeeded when this startup step fails.
+
+Pepper47's `include/ppapi/c/ppb_udp_socket.h` explicitly requires
+`PP_UDPSOCKET_OPTION_MULTICAST_TTL` to be set **before Bind()**. Discovery
+previously set TTL after binding and joining the group, which Linux permits.
+Move TTL255 configuration before binding; membership remains after binding.
+Do not skip failed TTL configuration or accept the default TTL1.
+
+`src/nacl_io/pepper_interface.cc` maps `PP_ERROR_FAILED`,
+`PP_ERROR_ABORTED` and `PP_ERROR_BLOCKS_MAIN_THREAD` to EPERM. Consequently
+errno1 alone does not establish a firmware permission restriction. The
+legacy wrapper's TTL5-to-TTL101 mapping is already correct and is retained.
+
+The new `mdns_ppapi_lifecycle` test executes the real discovery source against
+the documented PPAPI lifecycle restriction, using real descriptors, pipes and
+worker threads. Binding is redirected to an ephemeral local port and outgoing
+packets are captured. The unmodified 2.2.28 source reproduces the exact
+`mdns_ttl_failed_errno_1`; the reordered source emits all seven DNS records,
+sends TTL0 goodbyes and restarts. Transport TTL255 is distinct from DNS record
+TTL120/TTL0. Injected TTL and group-membership errors remain fatal and release
+their sockets. The SDK regression also verifies legacy TTL101 forwarding and
+error propagation. These are host regressions; physical Q8C/UE65MU6100 startup,
+iPhone discovery and playback still require a retest with the new WGT.
 
 ## 2.2.27: RAOP starts, then mDNS startup fails
 

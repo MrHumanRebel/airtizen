@@ -60,6 +60,11 @@ int main(int argc,char **argv) {
     ext.error=PP_ERROR_NOACCESS;
     return legacy.JoinGroup(1,23,PP_BlockUntilComplete())==PP_ERROR_NOACCESS?0:4;
   }
+  if(!strcmp(argv[1],"ttl")) {
+    if(legacy.SetOption(1,PP_UDPSOCKET_OPTION_MULTICAST_TTL,PP_MakeInt32(255),PP_BlockUntilComplete())!=0 || api.last!=PP_UDPSOCKET_EXT_OPTION_MULTICAST_TTL || api.value.type!=PP_VARTYPE_INT32 || api.value.value.as_int!=255)return 7;
+    api.error=PP_ERROR_FAILED;
+    return legacy.SetOption(1,PP_UDPSOCKET_OPTION_MULTICAST_TTL,PP_MakeInt32(255),PP_BlockUntilComplete())==PP_ERROR_FAILED?0:8;
+  }
   UdpNode node; node.udp_interface_wrapper_=&api;
   int yes=1;
   if(node.SetSockOptSocket(SO_REUSEADDR,&yes,sizeof(yes))!=0 || api.calls!=1 || api.last!=PP_UDPSOCKET_OPTION_ADDRESS_REUSE || api.value.type!=PP_VARTYPE_BOOL || !api.value.value.as_bool)return 5;
@@ -99,6 +104,11 @@ class SamsungUDP(unittest.TestCase):
     def test_reuseaddr_reaches_browser_and_errors_propagate(self):
         self.assertEqual(subprocess.run([str(self.directory/'sdk'),'reuse']).returncode,5)
         self.assertEqual(subprocess.run([str(self.directory/'fixed'),'reuse']).returncode,0)
+
+    def test_legacy_ttl_value_and_option_mapping_remain_intact(self):
+        for label in ('sdk','fixed'):
+            with self.subTest(runtime=label):
+                self.assertEqual(subprocess.run([str(self.directory/label),'ttl']).returncode,0)
 
 
 if __name__=='__main__': unittest.main(verbosity=2)
