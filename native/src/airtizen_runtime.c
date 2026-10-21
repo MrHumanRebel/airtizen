@@ -7,6 +7,7 @@
 #include "airtizen_playback.h"
 #include "airtizen_photo.h"
 #include "airtizen_metadata.h"
+#include "airtizen_capabilities.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,15 +22,9 @@ static char g_receiver_name[49] = "AirTizen TV";
 /* Each caller owns a separate status buffer; serializing never races a callback. */
 static __thread char g_json[32768];
 
-int airtizen_runtime_start(const char *device_name) {
+static int start_locked(const char *name) {
     int rc = 0;
-    size_t i;
-    const char *name = device_name && *device_name ? device_name : "AirTizen TV";
-    if (strlen(name) > 48) return -1;
-    for (i = 0; name[i]; ++i)
-        if ((unsigned char)name[i] < 32 || (unsigned char)name[i] > 126 || name[i] == '.') return -1;
-    pthread_mutex_lock(&g_lock);
-    if (g_started) { pthread_mutex_unlock(&g_lock); return 0; }
+    if (g_started) return 0;
     snprintf(g_receiver_name, sizeof(g_receiver_name), "%s", name);
     g_error[0] = 0;
     rc = airtizen_core_start(name);
@@ -39,16 +34,43 @@ int airtizen_runtime_start(const char *device_name) {
         if (rc != 0) {
             airtizen_core_stop();
             snprintf(g_error, sizeof(g_error), "%s", airtizen_mdns_last_error()[0] ? airtizen_mdns_last_error() : "mdns_start_failed");
-        } else g_started = 1;
+        } else {
+            char note[160]; g_started = 1;
+            snprintf(note, sizeof(note), "Discovery profile=%s model=%s features=%s",
+                airtizen_discovery_profile(), airtizen_discovery_model(), airtizen_discovery_features_txt());
+            airtizen_core_note(note);
+        }
     }
-    pthread_mutex_unlock(&g_lock);
     return rc;
 }
-void airtizen_runtime_stop(void) {
-    pthread_mutex_lock(&g_lock);
+static void stop_locked(void) {
     if (g_started) { airtizen_mdns_stop(); airtizen_core_stop(); airtizen_playback_stop(); airtizen_photo_reset(); g_started = 0; }
     g_error[0] = 0;
+}
+int airtizen_runtime_start(const char *device_name) {
+    int rc; size_t i;
+    const char *name = device_name && *device_name ? device_name : "AirTizen TV";
+    if (strlen(name) > 48) return -1;
+    for (i = 0; name[i]; ++i)
+        if ((unsigned char)name[i] < 32 || (unsigned char)name[i] > 126 || name[i] == '.') return -1;
+    pthread_mutex_lock(&g_lock); rc = start_locked(name);
+    pthread_mutex_unlock(&g_lock); return rc;
+}
+void airtizen_runtime_stop(void) {
+    pthread_mutex_lock(&g_lock); stop_locked();
     pthread_mutex_unlock(&g_lock);
+}
+int airtizen_runtime_set_discovery_profile(const char *profile) {
+    int was_started, rc;
+    char name[49];
+    if (!profile || (strcmp(profile, "native") && strcmp(profile, "uxplay-test"))) return -1;
+    pthread_mutex_lock(&g_lock);
+    if (!strcmp(profile, airtizen_discovery_profile())) { pthread_mutex_unlock(&g_lock); return 0; }
+    was_started = g_started; memcpy(name, g_receiver_name, sizeof(name));
+    stop_locked(); /* Old DNS goodbyes and HTTP workers finish before switching. */
+    rc = airtizen_discovery_set_profile(profile);
+    if (!rc && was_started) rc = start_locked(name);
+    pthread_mutex_unlock(&g_lock); return rc;
 }
 const char *airtizen_runtime_status_json(void) {
     airtizen_core_state state;
@@ -80,6 +102,7 @@ const char *airtizen_runtime_status_json(void) {
     airtizen_core_logs_json(logs, sizeof(logs));
     snprintf(g_json, sizeof(g_json),
         "{\"ok\":true,\"service\":\"%s\",\"receiverName\":%s,"
+        "\"discovery\":{\"profile\":\"%s\",\"model\":\"%s\",\"features\":\"%s\",\"implementedFeatures\":\"" AIRTIZEN_NATIVE_FEATURES_TXT "\",\"sourceVersion\":\"" AIRTIZEN_SOURCE_VERSION "\",\"experimental\":%s},"
         "\"capabilities\":{\"audio\":true,\"mirroring\":true,\"videoStreaming\":true,\"photos\":true,\"photoCaching\":true,\"slideshow\":false,\"drm\":false,\"productionReady\":false,\"audioOutput\":\"%s\"},"
         "\"protocols\":{\"airplay\":{\"enabled\":true,\"state\":\"%s\",\"discoverable\":%s,\"connected\":%s,\"device\":%s,\"lastError\":%s}},"
         "\"audio\":{\"state\":%s,\"sampleRate\":%u,\"bytesReceived\":%llu},"
@@ -90,6 +113,8 @@ const char *airtizen_runtime_status_json(void) {
         "\"status\":{\"mdns\":\"%s\",\"raop\":\"%s\",\"pair\":\"%s\",\"audio\":%s,\"connected\":%s,\"device\":%s,"
         "\"codec\":%s,\"rate\":\"%u\",\"buffer\":\"adaptive\",\"detail\":\"%s\",\"lastError\":%s},\"logs\":%s}",
         g_started ? "running" : g_error[0] ? "failed" : "offline", receiver,
+        airtizen_discovery_profile(), airtizen_discovery_model(), airtizen_discovery_features_txt(),
+        !strcmp(airtizen_discovery_profile(), "uxplay-test") ? "true" : "false",
 #if defined(__native_client__)
         "nacl",
 #elif defined(__TIZEN__)

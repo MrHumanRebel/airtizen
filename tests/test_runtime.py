@@ -405,6 +405,69 @@ class Runtime(unittest.TestCase):
         self.assertIn(b'RTSP/1.0 200 OK', response)
         self.assertIn(b'Public:', response)
         self.assertIn(b'RECORD', response)
+        self.assertIn(b'Server: AirTunes/220.68\r\n',response)
+        self.assertNotIn(b'PAUSE',response)
+        self.assertIn(b'501 Not Implemented',rtsp('PAUSE'))
+
+    def test_options_header_diagnostics_redact_identifiers(self):
+        secret='never-print-device-identity-0123456789'
+        headers={'User-Agent':'AirPlay/901.33.7 ('+secret+')','DACP-ID':secret,
+            'X-Apple-Session-ID':secret,'Authorization':secret,'X-Private-'+secret:secret}
+        reply=rtsp('OPTIONS','rtsp://192.0.2.44/'+secret,headers=headers)
+        self.assertTrue(reply.startswith(b'RTSP/1.0 200 OK'))
+        logs='\n'.join(http()[1]['logs'])
+        self.assertIn('protocol=RTSP/1.0 target=rtsp-uri',logs)
+        self.assertIn('OPTIONS header User-Agent: AirPlay/901.33.7 bytes=',logs)
+        self.assertIn('OPTIONS header DACP-ID: redacted bytes=',logs)
+        self.assertIn('OPTIONS header <other>: redacted bytes=',logs)
+        self.assertNotIn(secret,logs)
+        rtsp('OPTIONS',headers={'User-Agent':'AirPlay/12345678901234567890'+secret})
+        logs='\n'.join(http()[1]['logs'])
+        self.assertIn('target=asterisk',logs)
+        self.assertIn('OPTIONS header User-Agent: redacted bytes=',logs)
+        self.assertNotIn(secret,logs)
+
+    def test_discovery_profile_switch_preserves_identity_and_metadata(self):
+        def info(path='/info'):
+            with urllib.request.urlopen('http://127.0.0.1:5000'+path,timeout=2) as response:
+                return plistlib.loads(response.read())
+        original=info()
+        self.assertEqual(http('/discovery/uxplay-test','POST')[0],403)
+        self.assertEqual(http('/discovery/invalid','POST',{'X-AirTizen-Control':'1'})[0],404)
+        self.assertEqual(http('/discovery/native')[0],405)
+        try:
+            for profile,features,model in (('uxplay-test',0x5a7ffee6,'AppleTV3,2'),('native',0x4803a383,'AirTizen1,1')):
+                with socket.create_connection(('127.0.0.1',5000),timeout=2) as previous:
+                    previous.sendall(b'OPTIONS * RTSP/1.0\r\nCSeq: 1\r\n\r\n')
+                    old=b''
+                    while b'\r\n\r\n' not in old:old+=previous.recv(4096)
+                    code,state=http('/discovery/'+profile,'POST',{'X-AirTizen-Control':'1'})
+                    self.assertEqual(code,200)
+                    self.assertEqual(previous.recv(4096),b'')
+                self.assertEqual(state['receiverName'],NAME)
+                self.assertEqual(state['service'],'running')
+                self.assertEqual(state['discovery']['profile'],profile)
+                self.assertIn('Discovery profile='+profile,'\n'.join(state['logs']))
+                self.assertEqual(state['discovery']['implementedFeatures'],'0x4803a383,0x0')
+                self.assertEqual(state['discovery']['experimental'],profile=='uxplay-test')
+                self.assertFalse(state['capabilities']['productionReady'])
+                current=info();server=info('/server-info')
+                self.assertEqual((current['features'],server['features']),(features,features))
+                self.assertEqual((current['model'],server['model']),(model,model))
+                self.assertEqual(current['displays'][0]['rotation'],bool(features & (1<<8)))
+                self.assertEqual((current['deviceID'],current['pi']),(original['deviceID'],original['pi']))
+                qualified=info('/info?txtAirPlay&txtRAOP')
+                air=self.txt_fields(qualified['txtAirPlay']);raop=self.txt_fields(qualified['txtRAOP'])
+                self.assertEqual(raop['ft'],air['features'])
+                self.assertEqual(int(raop['ft'].split(',')[0],16),features)
+                self.assertEqual((raop['am'],air['model']),(model,model))
+                self.assertEqual((raop['vs'],air['srcvers'],current['sourceVersion']),('220.68',)*3)
+                self.assertEqual(bytes.fromhex(raop['pk']),current['pk'])
+                self.assertEqual(raop['pk'],air['pk'])
+                if profile=='uxplay-test':
+                    self.assertEqual((raop['rhd'],raop['sv'],raop['cn']),('5.6.0.0','false','0,1,2,3'))
+                else:self.assertEqual(raop['cn'],'1,2,3')
+        finally:http('/discovery/native','POST',{'X-AirTizen-Control':'1'})
 
     def test_raop_malformed_inputs(self):
         for method, path, body in [('SET_PARAMETER','*',b'volume: 0'), ('SETUP','*',b'bad'),
@@ -456,6 +519,8 @@ class Runtime(unittest.TestCase):
                     length=payload[pos];texts.append(payload[pos+1:pos+1+length].decode());pos+=length+1
         self.assertEqual(sorted(types),[1,12,12,16,16,33,33])
         self.assertIn('cn=1,2,3',texts)
+        self.assertIn('ft=0x4803a383,0x0',texts)
+        self.assertIn('am=AirTizen1,1',texts)
         feature=[v for v in texts if v.startswith('features=')][0]
         bits=int(feature.split('=')[1].split(',')[0],16)
         self.assertFalse(bits & (1<<2))
@@ -476,6 +541,20 @@ class Runtime(unittest.TestCase):
     def test_mirroring_requires_initial_session(self):
         body = plistlib.dumps({'streams':[{'type':110,'streamConnectionID':1}]},fmt=plistlib.FMT_BINARY)
         self.assertIn(b'400 Bad Request', rtsp('SETUP',body=body))
+
+    def test_zy_discovery_profile_leaves_stopped_receiver_offline(self):
+        try:
+            self.assertEqual(http('/stop','POST',{'X-AirTizen-Control':'1'})[1]['service'],'offline')
+            code,state=http('/discovery/uxplay-test','POST',{'X-AirTizen-Control':'1'})
+            self.assertEqual(code,200)
+            self.assertEqual(state['service'],'offline')
+            self.assertEqual(state['discovery']['profile'],'uxplay-test')
+            with socket.socket() as sock:
+                sock.settimeout(.2)
+                self.assertNotEqual(sock.connect_ex(('127.0.0.1',5000)),0)
+        finally:
+            http('/discovery/native','POST',{'X-AirTizen-Control':'1'})
+            http('/start','POST',{'X-AirTizen-Control':'1'})
 
     def test_zz_lifecycle(self):
         for _ in range(3):
@@ -503,6 +582,10 @@ class TokenControl(unittest.TestCase):
                 self.assertEqual(http('/status?token='+token)[0],200)
                 self.assertEqual(http('/status?token='+'0'*64)[0],403)
                 self.assertEqual(http('/stop?token='+token,'POST',{'X-AirTizen-Control':'1'})[0],403)
+                self.assertEqual(http('/discovery/uxplay-test?token='+token,'POST',{'X-AirTizen-Control':'1'})[0],403)
+                self.assertEqual(http('/discovery/uxplay-test','POST',{'X-AirTizen-Control':'0'*64})[0],403)
+                self.assertEqual(http('/discovery/uxplay-test','POST',{'X-AirTizen-Control':token})[1]['discovery']['profile'],'uxplay-test')
+                self.assertEqual(http('/discovery/native','POST',{'X-AirTizen-Control':token})[1]['discovery']['profile'],'native')
                 self.assertEqual(http('/stop','POST',{'X-AirTizen-Control':token})[0],200)
                 self.assertEqual(http('/start','POST',{'X-AirTizen-Control':token})[0],200)
                 # Tizen 3 WebKit's local-file POST origin still requires the

@@ -31,13 +31,15 @@
     <button id="developer-toggle" data-action="developer" aria-pressed="false">Developer mode: Off</button>
     <p class="muted">Show service details and recent logs when troubleshooting.</p>
     <button id="diagnostics-action" data-action="diagnostics" class="secondary hidden">Open diagnostics</button>
+    <button id="discovery-toggle" data-action="discovery" class="secondary hidden">Discovery profile: Native</button>
+    <p id="discovery-note" class="muted hidden">UxPlay test copies discovery metadata for compatibility testing. It does not add the advertised codecs or protocols. Switching disconnects active streams; reopen the iPhone AirPlay picker.</p>
     <button data-action="close" class="secondary">Done</button>
   </section>
   <section id="log-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="log-title">
     <h2 id="log-title">Developer diagnostics</h2>
     <div id="runtime-details"></div>
     <pre id="full-log"></pre>
-    <button data-action="clear" class="secondary">Clear local log</button><button data-action="close" class="secondary">Back</button>
+    <div class="diagnostic-actions"><button data-action="clear" class="secondary">Clear local log</button><button data-action="close" class="secondary">Back</button></div>
   </section>
   <script src="js/platform.js"></script>
   <script src="js/embedded-receiver.js"></script>

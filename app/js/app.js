@@ -33,11 +33,13 @@
     text('developer-toggle', 'Developer mode: ' + (value ? 'On' : 'Off'));
     $('developer-toggle').setAttribute('aria-pressed', value ? 'true' : 'false');
     visible($('diagnostics-action'), value);
+    visible($('discovery-toggle'), value); visible($('discovery-note'), value);
   }
   function render(res) {
     var s = res.status || {}, caps = res.capabilities || {}, track = res.nowPlaying || {};
     running = res.ok && res.service === 'running';
     lastResult = res;
+    text('discovery-toggle', 'Discovery profile: ' + (res.discovery && res.discovery.experimental ? 'UxPlay test' : 'Native'));
     text('receiver-name', res.receiverName || 'AirTizen TV');
     text('hero-status', !res.ok ? 'Receiver unavailable' : res.service === 'failed' ? 'Receiver startup failed' : s.connected ? 'You’re connected' : running ? (caps.audioOutput === 'host_stub' ? 'Receiver test mode' : 'Audio service running') : 'Receiver stopped');
     text('hero-detail', s.detail || 'Open diagnostics to check the receiver service.');
@@ -61,6 +63,7 @@
     if (!res.ok && embedded.error) text('hero-detail', embedded.error);
     text('runtime-details', 'Embedded receiver: ' + (embedded.phase || 'not loaded') + '\n' + 'Platform: ' + (platform.version || 'unknown') + '   WebAssembly: ' + !!platform.webAssembly + '   MediaSource: ' + !!platform.mediaSource + '\n' + (platform.userAgent || '') + '\n' + 'mDNS: ' + s.mdns + '   RAOP: ' + s.raop + '   Pairing: ' + s.pair + '\nAudio: ' + s.audio + '   Rate: ' + s.rate + '\nLast error: ' + (s.lastError || 'none'));
     if (developer) {
+      if (res.discovery) $('runtime-details').textContent += '\nDiscovery: ' + res.discovery.profile + '   Model: ' + res.discovery.model + '\nAdvertised: ' + res.discovery.features + '   Implemented: ' + res.discovery.implementedFeatures;
       text('full-log', res.log || 'No recent log entries.');
       $('full-log').scrollTop = $('full-log').scrollHeight;
     }
@@ -76,16 +79,19 @@
   function control(action) {
     if (busy) { pendingControl = action; return; }
     busy = true; clearTimeout(timer); $('receiver-action').disabled = true;
-    window.AirTizenBridge[action](function (res) {
+    var complete = function (res) {
       busy = false; $('receiver-action').disabled = false; render(res);
       timer = setTimeout(refresh, 1600);
-    });
+    };
+    if (action === 'discovery') window.AirTizenBridge.discovery(lastResult && lastResult.discovery && lastResult.discovery.experimental ? 'native' : 'uxplay-test', complete);
+    else window.AirTizenBridge[action](complete);
   }
   function action(name) {
     if (name === 'start' || name === 'stop') control(name);
     else if (name === 'settings') show('settings-overlay');
     else if (name === 'developer') setDeveloper(!developer);
     else if (name === 'diagnostics' && developer) show('log-overlay');
+    else if (name === 'discovery' && developer) control('discovery');
     else if (name === 'close') close();
     else if (name === 'clear') { window.AirTizenBridge.clearLog(); text('full-log', 'Local log cleared. Service logs are retained.'); }
   }

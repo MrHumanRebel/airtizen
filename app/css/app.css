@@ -31,6 +31,10 @@ footer span+span { float:right; }
 .overlay .muted { font-size:20px; color:#a5b4c5; }
 #runtime-details { font-size:20px; line-height:1.5; color:#a5b4c5; white-space:pre-wrap; }
 #full-log { height:400px; margin:22px 0 12px; overflow:auto; font-size:18px; line-height:1.5; white-space:pre-wrap; overflow-wrap:break-word; color:#c6d7e4; }
+#log-overlay { display:flex; flex-direction:column; }
+#log-overlay #runtime-details { flex:0 0 auto; max-height:270px; overflow:auto; }
+#log-overlay #full-log { flex:1 1 auto; height:auto; min-height:80px; }
+#log-overlay .diagnostic-actions { flex:0 0 auto; }
 .hidden { display:none !important; }
 
 #video-overlay { position:absolute; left:0; top:0; width:1920px; height:1080px; background:#000; z-index:5; }

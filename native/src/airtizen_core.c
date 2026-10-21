@@ -37,6 +37,9 @@ static void log_cb(void *cls, int level, const char *msg) {
     if (g_log_count < LOG_COUNT) ++g_log_count;
     pthread_mutex_unlock(&g_lock);
 }
+void airtizen_core_note(const char *message) {
+    if (message) log_cb(NULL, RAOP_LOG_INFO, message);
+}
 static void fail(const char *error) {
     pthread_mutex_lock(&g_lock);
     snprintf(g_state.last_error, sizeof(g_state.last_error), "%s", error);

@@ -2,6 +2,7 @@
 #include "airtizen_runtime.h"
 #include "airtizen_control_http.h"
 #include "airtizen_mdns.h"
+#include "airtizen_capabilities.h"
 #include "audio_queue.h"
 #include <nacl_io/nacl_io.h>
 #include <ppapi/cpp/audio.h>
@@ -82,6 +83,7 @@ class ReceiverInstance:public pp::Instance {
     }
     if(airtizen_control_http_set_token(token.c_str()))return false;
     if(airtizen_mdns_set_network(address.c_str(),id.c_str()))return false;
+    if(airtizen_discovery_set_profile("native"))return false;
     if(nacl_io_init_ppapi(pp_instance(),pp::Module::Get()->get_browser_interface()))return false;
     audio_host=&audio_;
     if(pthread_create(&worker_,NULL,&ReceiverInstance::Start,this)){audio_host=NULL;return false;}

@@ -19,10 +19,10 @@ static int airtizen_airplay_http(http_request_t *request,http_response_t **respo
         char receiver[96],identity[32],*encoded=NULL;uint32_t size=0;plist_t info=plist_new_dict();
         airtizen_mdns_identity(receiver,sizeof(receiver),identity,sizeof(identity));
         plist_dict_set_item(info,"deviceid",plist_new_string(identity));
-        plist_dict_set_item(info,"features",plist_new_uint(AIRTIZEN_FEATURES));
-        plist_dict_set_item(info,"model",plist_new_string("AirTizen1,1"));
+        plist_dict_set_item(info,"features",plist_new_uint(airtizen_discovery_features()));
+        plist_dict_set_item(info,"model",plist_new_string(airtizen_discovery_model()));
         plist_dict_set_item(info,"protovers",plist_new_string("1.0"));
-        plist_dict_set_item(info,"srcvers",plist_new_string("220.68"));
+        plist_dict_set_item(info,"srcvers",plist_new_string(AIRTIZEN_SOURCE_VERSION));
         plist_to_xml(info,&encoded,&size);plist_free(info);
         airtizen_http_reply(response,200,"text/x-apple-plist+xml",encoded,(int)size);free(encoded);return 1;
     }

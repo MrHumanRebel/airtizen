@@ -14,6 +14,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
@@ -193,14 +194,66 @@ httpd_remove_connection(httpd_t *httpd, http_connection_t *connection)
 	httpd->open_connections--;
 }
 
-/* Log only fixed route labels, never URL queries, headers or request bodies. */
+/* Extract only a known software product and bounded numeric version, excluding
+ * appended device names, OS descriptions, identifiers and arbitrary strings. */
+static int httpd_agent_product(const char *value, char product[48]) {
+    static const char *prefixes[] = {"AirPlay/", "AirTunes/", "MediaControl/", "MediaRemote/", "iTunes/"};
+    unsigned i;
+    if (!value) return 0;
+    for (i = 0; i < sizeof(prefixes)/sizeof(prefixes[0]); ++i) {
+        size_t length = strlen(prefixes[i]), end = length;
+        unsigned groups = 0;
+        if (strncmp(value, prefixes[i], length)) continue;
+        do {
+            unsigned digits = 0;
+            while (value[end] >= '0' && value[end] <= '9') { ++end; if (++digits > 4) return 0; }
+            if (!digits || ++groups > 4) return 0;
+            if (value[end] != '.') break;
+            ++end;
+        } while (1);
+        if (value[end] && value[end] != ' ' && value[end] != '(' && value[end] != ';') return 0;
+        if (end >= 48) return 0;
+        memcpy(product, value, end); product[end] = 0; return 1;
+    }
+    return 0;
+}
+
+/* Emit canonical allowlisted field names and byte counts, not raw headers.
+ * Unknown field names may themselves contain identifiers and are redacted. */
+static void httpd_trace_options(httpd_t *httpd, http_connection_t *connection, http_request_t *request) {
+    static const char *fields[] = {"CSeq", "User-Agent", "Apple-Challenge", "X-Apple-ProtocolVersion",
+        "X-Apple-Session-ID", "X-Apple-Device-ID", "X-Apple-Device-Identifier", "X-Apple-Client-Name",
+        "Client-Instance", "DACP-ID", "Active-Remote", "Authorization", "Content-Length",
+        "Content-Type", "Connection", "Host", "Upgrade", "X-Apple-Purpose", "X-Apple-Session-Protocol-Version"};
+    const char *url = http_request_get_url(request), *target;
+    unsigned i, count = http_request_get_header_count(request);
+    int body_size = 0;
+    target = !strcmp(url, "*") ? "asterisk" : !strncmp(url, "rtsp://", 7) || !strncmp(url, "rtsps://", 8) ? "rtsp-uri" : url[0] == '/' ? "path" : "other";
+    http_request_get_data(request, &body_size);
+    logger_log(httpd->logger, LOGGER_INFO, "OPTIONS socket %d: protocol=%s target=%s headers=%u body=%d",
+        connection->socket_fd, http_request_get_protocol(request), target, count, body_size);
+    for (i = 0; i < count && i < 16; ++i) {
+        const char *name = http_request_get_header_name(request, i), *label = "<other>", *value;
+        unsigned j; char product[48];
+        for (j = 0; j < sizeof(fields)/sizeof(fields[0]); ++j)
+            if (name && !strcasecmp(name, fields[j])) { label = fields[j]; break; }
+        value = http_request_get_header_value(request, i);
+        if (!strcmp(label, "User-Agent") && httpd_agent_product(value, product))
+            logger_log(httpd->logger, LOGGER_INFO, "OPTIONS header %s: %s bytes=%lu", label, product, (unsigned long)strlen(value));
+        else logger_log(httpd->logger, LOGGER_INFO, "OPTIONS header %s: redacted bytes=%lu", label, value ? (unsigned long)strlen(value) : 0UL);
+    }
+    if (count > 16) logger_log(httpd->logger, LOGGER_INFO, "OPTIONS headers omitted=%u", count - 16);
+}
+
+/* Log only fixed route labels, never URL queries, raw headers or request bodies.
+ * OPTIONS additionally records bounded, redacted header metadata above. */
 static void httpd_trace_request(httpd_t *httpd, http_connection_t *connection,
                                 http_request_t *request, http_response_t *response) {
     static const char *routes[] = {"/info", "/pair-setup", "/pair-verify", "/fp-setup",
         "/feedback", "/server-info", "/reverse", "/play", "/stop", "/photo", "/rate", "/scrub", "/playback-info"};
     const char *method = http_request_get_method(request), *url = http_request_get_url(request);
     const char *label = url && url[0] == '/' ? "<other>" : "<session>";
-    unsigned i; int status = 0, length;
+    unsigned i; int status = 0, length = 0;
     if (!method || !url) return; /* Reverse-channel response, not a request. */
     for (i = 0; i < sizeof(routes)/sizeof(routes[0]); ++i) {
         size_t n = strlen(routes[i]);
@@ -211,8 +264,9 @@ static void httpd_trace_request(httpd_t *httpd, http_connection_t *connection,
         if (sscanf(wire, "%*15s %d", &status) != 1) status = 0;
     }
     ++connection->request_count;
-    logger_log(httpd->logger, LOGGER_INFO, "AirPlay socket %d: %s %s status=%d",
-        connection->socket_fd, method, label, status);
+    if (!strcmp(method, "OPTIONS")) httpd_trace_options(httpd, connection, request);
+    logger_log(httpd->logger, LOGGER_INFO, "AirPlay socket %d: %s %s status=%d bytes=%d",
+        connection->socket_fd, method, label, status, length);
 }
 
 static THREAD_RETVAL
