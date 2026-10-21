@@ -30,27 +30,9 @@ handlers = handlers.replace('int ret = fairplay_decrypt(conn->fairplay, ekey, ae
 handlers = handlers.replace('http_response_add_header(response, "Content-Type", "application/octet-stream");\n\t\tbreak;\n\t}', 'if (conn->raop->callbacks.pairing_verified) conn->raop->callbacks.pairing_verified(conn->raop->callbacks.cls);\n        http_response_add_header(response, "Content-Type", "application/octet-stream");\n\t\tbreak;\n\t}')
 start = handlers.index('\t// Binary plist with display capabilities:')
 end = handlers.index('\n}\n\nstatic void\nraop_handler_pairsetup', start)
-handlers = handlers[:start] + """    unsigned char public_key[32];
-    char receiver[96], device_id[32];
-    char *encoded = NULL;
+handlers = handlers[:start] + """    char *encoded = NULL;
     uint32_t encoded_size = 0;
-    plist_t info = plist_new_dict();
-    airtizen_mdns_identity(receiver, sizeof(receiver), device_id, sizeof(device_id));
-    pairing_get_public_key(conn->raop->pairing, public_key);
-    plist_dict_set_item(info, "name", plist_new_string(receiver));
-    plist_dict_set_item(info, "deviceID", plist_new_string(device_id));
-    plist_dict_set_item(info, "macAddress", plist_new_string(device_id));
-    plist_dict_set_item(info, "model", plist_new_string("AirTizen1,1"));
-    plist_dict_set_item(info, "sourceVersion", plist_new_string("220.68"));
-    plist_dict_set_item(info, "features", plist_new_uint(AIRTIZEN_FEATURES));
-    plist_dict_set_item(info, "statusFlags", plist_new_uint(4));
-    {
-        unsigned i;plist_t formats=plist_new_array();
-        for(i=100;i<=101;++i){plist_t item=plist_new_dict();plist_dict_set_item(item,"type",plist_new_uint(i));plist_dict_set_item(item,"audioInputFormats",plist_new_uint(0x1d40000));plist_dict_set_item(item,"audioOutputFormats",plist_new_uint(0x1d40000));plist_array_append_item(formats,item);}
-        plist_dict_set_item(info,"audioFormats",formats);
-    }
-    plist_dict_set_item(info, "vv", plist_new_uint(2));
-    plist_dict_set_item(info, "pk", plist_new_data((const char *)public_key, sizeof(public_key)));
+    plist_t info = airtizen_receiver_info(conn, request);
     plist_to_bin(info, &encoded, &encoded_size);
     plist_free(info);
     if (encoded && encoded_size <= 65536) {
@@ -60,6 +42,7 @@ handlers = handlers[:start] + """    unsigned char public_key[32];
     } else { free(encoded); http_response_set_disconnect(response, 1); }
 """ + handlers[end:]
 handlers = '#include "airtizen_mdns.h"\n#include "airtizen_capabilities.h"\n' + handlers
+handlers = handlers.replace('static void\nraop_handler_info', '#include "airtizen_receiver_info.h"\n\nstatic void\nraop_handler_info', 1)
 handlers = handlers.replace('raop_rtp_start_audio(conn->raop_rtp, use_udp, remote_cport, remote_tport, &cport, &tport, &dport);', """unsigned ct=8,frames=480,rate=44100,channels=2;
             plist_t value;
             if(airtizen_audio_parameters(stream_note,&ct,&frames,&rate,&channels)!=0){plist_free(root_node);http_response_set_disconnect(response,1);return;}
@@ -72,19 +55,30 @@ handlers = handlers.replace('raop_rtp_start_audio(conn->raop_rtp, use_udp, remot
 write("raop_handlers.generated.h", handlers)
 
 raop = read("raop.c").replace('"raop_handlers.h"', '"raop_handlers.generated.h"')
+raop += '\nvoid raop_get_public_key(raop_t *raop, unsigned char key[32]) { pairing_get_public_key(raop->pairing, key); }\n'
 raop = raop.replace('struct raop_conn_s {', 'struct raop_conn_s {\n    int photo_seen;\n    unsigned photo_session;\n    int reverse, event_waiting, event_state;\n    unsigned event_generation;\n    uint64_t event_time;\n    char event_session[65];')
 raop = raop.replace('#include "raop_handlers.generated.h"', '#include "raop_handlers.generated.h"\n#include "airtizen_raop_guard.h"\n#include "airtizen_airplay_http.h"\n#include "airtizen_reverse.h"')
-raop = raop.replace('if (!method || !cseq) {', 'if (conn->reverse) { if (!url) conn->event_waiting=0; else conn->reverse=-1; return; }\n    if (airtizen_reverse_upgrade(conn, request, response)) return;\n    if (airtizen_airplay_http(request, response)) return;\n    if (method && url && !cseq) { airtizen_http_reply(response, 404, NULL, NULL, 0); return; }\n\tif (!method || !url || !cseq) {')
+raop = raop.replace('if (!method || !cseq) {', """if (conn->reverse) { if (!url) conn->event_waiting=0; else conn->reverse=-1; return; }
+    if (airtizen_reverse_upgrade(conn, request, response)) return;
+    if (airtizen_airplay_http(request, response)) return;
+    if (method && url && !cseq && !strcmp(http_request_get_protocol(request), "RTSP/1.0")) {
+        *response = http_response_init("RTSP/1.0", 400, "Bad Request");
+        http_response_set_disconnect(*response, 1);
+        http_response_finish(*response, NULL, 0); return;
+    }
+    if (!method || !url) {""")
+raop = raop.replace('!strcmp(url, "/info")', 'airtizen_info_path(url)')
+raop = raop.replace('http_response_add_header(*response, "CSeq", cseq);', 'if (cseq) http_response_add_header(*response, "CSeq", cseq);')
 raop = raop.replace('*response = http_response_init("RTSP/1.0", 200, "OK");', """int validation = airtizen_validate_request(conn, request);
     if (validation) {
-        *response = http_response_init("RTSP/1.0", validation,
+        *response = http_response_init(http_request_get_protocol(request), validation,
             validation == 501 ? "Not Implemented" : validation == 404 ? "Not Found" : "Bad Request");
-        http_response_add_header(*response, "CSeq", cseq);
+        if (cseq) http_response_add_header(*response, "CSeq", cseq);
         http_response_set_disconnect(*response, 1);
         http_response_finish(*response, NULL, 0);
         return;
     }
-    *response = http_response_init("RTSP/1.0", 200, "OK");""")
+    *response = http_response_init(http_request_get_protocol(request), 200, "OK");""")
 raop = raop.replace("httpd_cbs.conn_destroy = &conn_destroy;", "httpd_cbs.conn_destroy = &conn_destroy;\n    httpd_cbs.conn_poll = &airtizen_reverse_poll;")
 write("raop.generated.c", raop)
 

@@ -30,6 +30,7 @@ static unsigned int g_ttl = 120;
 static int g_sock = -1;
 static char g_name[96] = "AirTizen TV";
 static char g_id[32] = "A1B2C3D4E5F6";
+static char g_public_key[65];
 static unsigned short g_port = 5000;
 static struct in_addr g_address;
 static int g_network_override;
@@ -37,6 +38,22 @@ static char g_start_error[80];
 const char *airtizen_mdns_last_error(void) { return g_start_error; }
 static void start_error(const char *stage, int error) {
     snprintf(g_start_error, sizeof(g_start_error), "mdns_%s_failed_errno_%d", stage, error);
+}
+
+int airtizen_mdns_set_public_key(const unsigned char key[32]) {
+    size_t i;
+    if (!key) return -1;
+    pthread_mutex_lock(&g_identity_lock);
+    if (g_running) { pthread_mutex_unlock(&g_identity_lock); return -1; }
+    for (i = 0; i < 32; ++i) snprintf(g_public_key + 2*i, 3, "%02x", key[i]);
+    pthread_mutex_unlock(&g_identity_lock);
+    return 0;
+}
+
+void airtizen_mdns_pairing_id(char uuid[37]) {
+    pthread_mutex_lock(&g_identity_lock);
+    snprintf(uuid, 37, "00000000-0000-4000-8000-%.12s", g_id);
+    pthread_mutex_unlock(&g_identity_lock);
 }
 
 int airtizen_mdns_set_network(const char *ipv4,const char *id) {
@@ -122,15 +139,8 @@ static int srv(unsigned char *b, int p, const char *instance, unsigned short por
     return p;
 }
 
-static int txt_raop(unsigned char *b, int p, const char *instance) {
-    int lpos, start;
-    p = name(b, p, instance);
-    p = u16(b, p, 16);
-    p = u16(b, p, 0x8001);
-    p = u32(b, p, g_ttl);
-    lpos = p;
-    p = u16(b, p, 0);
-    start = p;
+static int txt_raop_data(unsigned char *b, int p) {
+    char key[68];
     p = txt(b, p, "txtvers=1");
     p = txt(b, p, "ch=2");
     p = txt(b, p, "md=0,1,2");
@@ -144,20 +154,12 @@ static int txt_raop(unsigned char *b, int p, const char *instance) {
     p = txt(b, p, "vn=65537");
     p = txt(b, p, "vs=220.68");
     p = txt(b, p, "sf=0x4");
-    b[lpos] = (unsigned char)(((p - start) >> 8) & 255);
-    b[lpos + 1] = (unsigned char)((p - start) & 255);
+    if (g_public_key[0]) { snprintf(key, sizeof(key), "pk=%s", g_public_key); p = txt(b, p, key); }
     return p;
 }
 
-static int txt_airplay(unsigned char *b, int p, const char *instance) {
-    int lpos, start;
-    p = name(b, p, instance);
-    p = u16(b, p, 16);
-    p = u16(b, p, 0x8001);
-    p = u32(b, p, g_ttl);
-    lpos = p;
-    p = u16(b, p, 0);
-    start = p;
+static int txt_airplay_data(unsigned char *b, int p) {
+    char key[68], identifier[40];
     char deviceid[40];
     snprintf(deviceid, sizeof(deviceid), "deviceid=%.2s:%.2s:%.2s:%.2s:%.2s:%.2s", g_id, g_id+2, g_id+4, g_id+6, g_id+8, g_id+10);
     p = txt(b, p, deviceid);
@@ -166,8 +168,27 @@ static int txt_airplay(unsigned char *b, int p, const char *instance) {
     p = txt(b, p, "model=AirTizen1,1");
     p = txt(b, p, "srcvers=220.68");
     p = txt(b, p, "vv=2");
-    b[lpos] = (unsigned char)(((p - start) >> 8) & 255);
-    b[lpos + 1] = (unsigned char)((p - start) & 255);
+    if (g_public_key[0]) { snprintf(key, sizeof(key), "pk=%s", g_public_key); p = txt(b, p, key); }
+    snprintf(identifier, sizeof(identifier), "pi=00000000-0000-4000-8000-%.12s", g_id);
+    p = txt(b, p, identifier);
+    return p;
+}
+
+size_t airtizen_mdns_txt(int airplay, unsigned char *out, size_t capacity) {
+    unsigned char data[512]; int size;
+    pthread_mutex_lock(&g_identity_lock);
+    size = airplay ? txt_airplay_data(data, 0) : txt_raop_data(data, 0);
+    pthread_mutex_unlock(&g_identity_lock);
+    if (!out || capacity < (size_t)size) return 0;
+    memcpy(out, data, (size_t)size); return (size_t)size;
+}
+
+static int txt_record(unsigned char *b, int p, const char *instance, int airplay) {
+    int length, start;
+    p = name(b, p, instance); p = u16(b, p, 16); p = u16(b, p, 0x8001);
+    p = u32(b, p, g_ttl); length = p; p = u16(b, p, 0); start = p;
+    p = airplay ? txt_airplay_data(b, p) : txt_raop_data(b, p);
+    b[length] = (unsigned char)((p - start) >> 8); b[length + 1] = (unsigned char)(p - start);
     return p;
 }
 
@@ -228,10 +249,10 @@ static int build_packet(unsigned char *b) {
     p = u16(b, p, 0);
     p = ptr(b, p, "_raop._tcp.local", raop);
     p = srv(b, p, raop, g_port, host);
-    p = txt_raop(b, p, raop);
+    p = txt_record(b, p, raop, 0);
     p = ptr(b, p, "_airplay._tcp.local", air);
     p = srv(b, p, air, g_port, host);
-    p = txt_airplay(b, p, air);
+    p = txt_record(b, p, air, 1);
     p = address_record(b, p, host);
     return p;
 }

@@ -57,7 +57,10 @@ static int airtizen_validate_request(raop_conn_t *conn, http_request_t *request)
         plist_free(root);
         return valid ? 0 : 400;
     }
-    if (!strcmp(method, "GET")) return !strcmp(url, "/info") ? 0 : 404;
+    if (!strcmp(method, "GET")) {
+        unsigned flags;
+        return airtizen_info_path(url) ? (airtizen_info_qualifiers(request, &flags) ? 400 : 0) : 404;
+    }
     if (!strcmp(method, "OPTIONS") || !strcmp(method, "RECORD") ||
         !strcmp(method, "FLUSH") || !strcmp(method, "GET_PARAMETER") ||
         !strcmp(method, "SET_PARAMETER") || !strcmp(method, "TEARDOWN")) return 0;

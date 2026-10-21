@@ -27,6 +27,7 @@ int http_request_has_error(http_request_t *request);
 const char *http_request_get_error_name(http_request_t *request);
 const char *http_request_get_error_description(http_request_t *request);
 const char *http_request_get_method(http_request_t *request);
+const char *http_request_get_protocol(http_request_t *request);
 const char *http_request_get_url(http_request_t *request);
 const char *http_request_get_header(http_request_t *request, const char *name);
 const char *http_request_get_data(http_request_t *request, int *datalen);

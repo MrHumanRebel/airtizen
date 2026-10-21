@@ -2,6 +2,7 @@
 """Real process/socket integration checks; no Apple-device claims."""
 import concurrent.futures
 import hashlib
+from http.client import HTTPConnection
 import json
 import os
 from pathlib import Path
@@ -165,19 +166,25 @@ class Runtime(unittest.TestCase):
                 self.assertTrue(data['ok'])
 
     def test_pair_verify_real_crypto(self):
+        self.verify_pairing('RTSP/1.0', True)
+
+    def test_http_pair_verify_real_crypto(self):
+        self.verify_pairing('HTTP/1.1', False)
+
+    def verify_pairing(self, protocol, cseq):
         signing = ed25519.Ed25519PrivateKey.generate()
         ephemeral = x25519.X25519PrivateKey.generate()
         signing_pub = signing.public_key().public_bytes_raw()
         ephemeral_pub = ephemeral.public_key().public_bytes_raw()
         with socket.create_connection(('127.0.0.1',5000),timeout=4) as sock:
             def exchange(path, body, sequence, method="POST"):
-                request=(f'{method} {path} RTSP/1.0\r\nCSeq: {sequence}\r\nContent-Length: {len(body)}\r\n\r\n').encode()+body
+                request=(f'{method} {path} {protocol}\r\n'+(f'CSeq: {sequence}\r\n' if cseq else '')+f'Content-Length: {len(body)}\r\n\r\n').encode()+body
                 sock.sendall(request)
                 response=b''
                 while b'\r\n\r\n' not in response:
                     response+=sock.recv(8192)
                 header,payload=response.split(b'\r\n\r\n',1)
-                self.assertIn(b'200 OK',header)
+                self.assertTrue(header.startswith((protocol+' 200 OK').encode()))
                 fields=dict(line.split(b': ',1) for line in header.split(b'\r\n')[1:])
                 length=int(fields.get(b'Content-Length',b'0'))
                 while len(payload)<length:
@@ -217,6 +224,89 @@ class Runtime(unittest.TestCase):
         self.assertEqual(info['features'],0x4803a383)
         self.assertEqual({entry['type'] for entry in info['audioFormats']},{100,101})
         self.assertTrue(all(entry['audioOutputFormats']==0x1d40000 for entry in info['audioFormats']))
+        display=info['displays'][0]
+        self.assertEqual((display['width'],display['height'],display['maxFPS']),(1920,1080,30))
+        self.assertAlmostEqual(display['refreshRate'],1/60)
+        self.assertEqual(display['uuid'],info['pi'])
+        self.assertEqual({item['type'] for item in info['audioLatencies']},{100,101})
+        self.assertFalse(info['keepAliveLowPower'])
+        self.assertFalse(info['keepAliveSendStatsAsBody'])
+
+    @staticmethod
+    def txt_fields(data):
+        fields={};position=0
+        while position<len(data):
+            length=data[position];position+=1
+            item=data[position:position+length].decode();position+=length
+            key,_,value=item.partition('=');fields[key]=value
+        return fields
+
+    def test_http_info_qualifiers_and_persistent_empty_responses(self):
+        client=HTTPConnection('127.0.0.1',5000,timeout=2)
+        try:
+            client.request('GET','/info',headers={'CSeq':'7'})
+            response=client.getresponse()
+            self.assertEqual((response.version,response.status),(11,200))
+            self.assertEqual(response.getheader('CSeq'),'7')
+            info=plistlib.loads(response.read())
+            body=plistlib.dumps({'qualifier':['txtAirPlay','txtRAOP']},fmt=plistlib.FMT_BINARY)
+            client.request('GET','/info',body,{'Content-Type':'application/x-apple-binary-plist'})
+            response=client.getresponse();self.assertEqual(response.status,200)
+            qualified=plistlib.loads(response.read())
+            self.assertEqual(set(qualified),{'txtAirPlay','txtRAOP'})
+            for key in ('txtAirPlay','txtRAOP'):
+                self.assertEqual(bytes.fromhex(self.txt_fields(qualified[key])['pk']),info['pk'])
+            self.assertEqual(self.txt_fields(qualified['txtAirPlay'])['pi'],info['pi'])
+            # An empty HTTP reply must have a length, otherwise the client
+            # waits for EOF while the receiver keeps this socket open.
+            client.request('POST','/feedback',b'')
+            response=client.getresponse()
+            self.assertEqual(response.status,200)
+            self.assertEqual(response.getheader('Content-Length'),'0')
+            self.assertEqual(response.read(),b'')
+            client.request('GET','/info?txtAirPlay')
+            response=client.getresponse();self.assertEqual(response.status,200)
+            self.assertEqual(plistlib.loads(response.read())['txtAirPlay'],qualified['txtAirPlay'])
+        finally:client.close()
+
+    def test_pipelined_mixed_protocol_requests_and_fragmented_body(self):
+        messages=[
+            b'GET /info?txtAirPlay HTTP/1.1\r\nHost: receiver\r\n\r\n',
+            b'GET /info RTSP/1.0\r\nCSeq: 1\r\n\r\n',
+            b'POST /feedback HTTP/1.1\r\nContent-Length: 0\r\n\r\n',
+            b'POST /pair-setup RTSP/1.0\r\nCSeq: 2\r\nContent-Length: 32\r\n\r\n'+bytes(32)]
+        pending=b'';bodies=[]
+        with socket.create_connection(('127.0.0.1',5000),timeout=2) as sender:
+            # Coalesce complete requests, but split the final body across reads.
+            packed=b''.join(messages)
+            sender.sendall(packed[:-17]);time.sleep(.02);sender.sendall(packed[-17:])
+            for protocol in (b'HTTP/1.1',b'RTSP/1.0',b'HTTP/1.1',b'RTSP/1.0'):
+                while b'\r\n\r\n' not in pending:
+                    part=sender.recv(8192);self.assertTrue(part);pending+=part
+                header,pending=pending.split(b'\r\n\r\n',1)
+                self.assertTrue(header.startswith(protocol+b' 200 '),header)
+                fields=dict(line.split(b': ',1) for line in header.split(b'\r\n')[1:])
+                length=int(fields[b'Content-Length'])
+                while len(pending)<length:
+                    part=sender.recv(8192);self.assertTrue(part);pending+=part
+                bodies.append(pending[:length]);pending=pending[length:]
+        self.assertEqual(bodies[2],b'')
+        self.assertEqual(bodies[3],plistlib.loads(bodies[1])['pk'])
+        self.assertEqual(bytes.fromhex(self.txt_fields(plistlib.loads(bodies[0])['txtAirPlay'])['pk']),bodies[3])
+
+    def test_info_rejects_malformed_qualifiers(self):
+        for value in ([],{'qualifier':'txtAirPlay'},{'qualifier':[123]}):
+            body=plistlib.dumps(value,fmt=plistlib.FMT_BINARY)
+            self.assertIn(b'400 Bad Request',rtsp('GET','/info',body))
+
+    def test_handshake_logs_status_without_credentials(self):
+        secret='never-log-iphone-secret'
+        request=urllib.request.Request('http://127.0.0.1:5000/info?txtAirPlay&token='+secret,
+            headers={'Authorization':secret})
+        with urllib.request.urlopen(request,timeout=2) as response:self.assertEqual(response.status,200)
+        logs='\n'.join(http()[1]['logs'])
+        self.assertIn('GET /info status=200',logs)
+        self.assertNotIn(secret,logs)
 
     def test_url_video_reverse_events(self):
         def command(path,body=b''):
@@ -298,7 +388,7 @@ class Runtime(unittest.TestCase):
                 if len(packet)>=12 and packet[2]&128 and NAME.encode() in packet:break
             else:self.fail('Receiver did not advertise its identity')
         self.assertEqual(struct.unpack('!H',packet[6:8])[0],7)
-        position=12;types=[];texts=[]
+        position=12;types=[];texts=[];txt_records={}
         for _ in range(7):
             owner,position=name(packet,position)
             kind,cls,ttl,size=struct.unpack('!HHIH',packet[position:position+10]);position+=10
@@ -308,6 +398,7 @@ class Runtime(unittest.TestCase):
             if kind==33:self.assertEqual(struct.unpack('!H',payload[4:6])[0],5000)
             if kind==1:self.assertFalse(socket.inet_ntoa(payload).startswith('127.'))
             if kind==16:
+                txt_records['txtAirPlay' if '._airplay.' in owner else 'txtRAOP']=payload
                 pos=0
                 while pos<len(payload):
                     length=payload[pos];texts.append(payload[pos+1:pos+1+length].decode());pos+=length+1
@@ -318,6 +409,9 @@ class Runtime(unittest.TestCase):
         self.assertFalse(bits & (1<<2))
         self.assertTrue(bits & (1<<0))
         self.assertTrue(bits & (1<<7))
+        with urllib.request.urlopen('http://127.0.0.1:5000/info',timeout=2) as response:info=plistlib.loads(response.read())
+        for text in txt_records.values():self.assertEqual(bytes.fromhex(self.txt_fields(text)['pk']),info['pk'])
+        self.assertEqual(self.txt_fields(txt_records['txtAirPlay'])['pi'],info['pi'])
 
     def test_rejects_unsupported_audio_negotiation(self):
         for stream in ({'type':96,'ct':999}, {'type':96,'ct':2,'spf':65536},
