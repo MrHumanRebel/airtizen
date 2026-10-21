@@ -1,5 +1,67 @@
 # Samsung Tizen 3.0 receiver startup failures
 
+## 2.2.29: discovery succeeds, but the iPhone disconnects
+
+[Issue #22](https://github.com/MrHumanRebel/airtizen/issues/22) reports working
+discovery and repeated accepted TCP connections followed by disconnects on
+UE65MU6405 with iOS 27.0.1. The conversation reports the same symptoms on
+QA75Q8CAMJXXZ with iPhone 15 Plus, Tizen 3.0 and iOS 26.5.2.
+Additional LAN probes in the issue receive successful RTSP `/info`,
+`/pair-setup`, `/pair-verify` and first-stage `/fp-setup` replies from another
+Tizen 3.0 TV. Those probes establish that request transport can work; they do
+not identify the request, response or sender decision causing the iPhone to
+disconnect. The previous INFO logs omitted individual handshake requests.
+
+The handshake compatibility update addresses concrete omissions:
+
+- `/info` works over both HTTP and RTSP. Its response protocol follows the
+  request, including when an HTTP request contains `CSeq`. RTSP still requires
+  `CSeq`. HTTP pairing no longer falls through to a 404 response.
+- `/info` includes display negotiation limits, audio latency descriptors,
+  initial volume and explicit keepalive capabilities. The 1920x1080/30 FPS
+  display configuration describes the existing mirroring path, not a panel
+  measurement or verified playback throughput. Latency compensation remains
+  uncalibrated; neither low-power keepalive nor statistics bodies are claimed.
+- Both DNS-SD services advertise the actual receiver Ed25519 public key.
+  The AirPlay service also advertises a device-ID-derived pairing UUID.
+  Qualified `/info` requests, using the binary-plist `qualifier` array or query
+  names `txtAirPlay`/`txtRAOP`, return the same TXT wire records as multicast
+  discovery. The key remains scoped to a receiver instance; this does not add
+  persistent sender authorization.
+- Empty replies include `Content-Length: 0`. Without that framing, an HTTP
+  client can wait for EOF while the receiver keeps the connection open.
+  Multiple requests received in one TCP read are processed separately, and a
+  fragmented final request is preserved. Interrupted sends are retried; a
+  failed or incomplete send closes its connection.
+- Response buffers grow from their used length and update their capacity.
+  The old implementation repeatedly reallocated short responses and could
+  underallocate accumulated long headers. This is a separate reproducible
+  defect, not an established explanation of the physical-TV disconnect.
+
+Protocol comparison used [UxPlay's handlers at
+dbb8a8f451597aa5f2e56c830ce41c4a655a8f98](https://github.com/FDH2/UxPlay/blob/dbb8a8f451597aa5f2e56c830ce41c4a655a8f98/lib/raop_handlers.h)
+and the [AirPlay feature reference](https://github.com/openairplay/airplay-spec/blob/master/features.md).
+The feature mask stays `0x4803a383,0x0`; copying a larger mask would advertise
+unimplemented authentication, DRM or AirPlay 2 features.
+
+Host integration checks verify real Ed25519/X25519 pair verification over
+HTTP and RTSP, discovery/public-key agreement, qualified info, persistent
+empty replies, coalesced requests and fragmented bodies. A bounded allocator
+regression covers response growth, and sanitizer checks cover the host code.
+ARM NaCl validation checks the complete embedded receiver. None of these
+checks reproduces an actual iPhone selection or confirms playback on a TV.
+
+After installing the updated WGT, capture the Developer diagnostics immediately
+after selecting AirTizen on the iPhone. Safe INFO-level entries now identify
+the method, fixed route label and response status, for example
+`AirPlay socket 10: GET /info status=200`. Queries, authorization headers and
+pairing bodies are excluded. On peer closure, `received=` reports total bytes
+and `requests=` reports completed requests. Zero bytes distinguishes a silent
+peer from an incomplete request; a nonzero request count identifies how far
+dispatch progressed. Parser and send failures retain their error codes.
+The exact sender-abort cause and physical audio/mirroring compatibility remain
+unverified until that device retest.
+
 ## 2.2.28: multicast TTL is set after binding
 
 [Issue #20](https://github.com/MrHumanRebel/airtizen/issues/20) reports

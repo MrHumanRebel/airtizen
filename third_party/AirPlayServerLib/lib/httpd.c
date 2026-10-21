@@ -34,6 +34,8 @@ struct http_connection_s {
 	int socket_fd;
 	void *user_data;
 	http_request_t *request;
+    unsigned long received_bytes;
+    unsigned request_count;
 };
 typedef struct http_connection_s http_connection_t;
 
@@ -127,6 +129,8 @@ httpd_add_connection(httpd_t *httpd, int fd, unsigned char *local, int local_len
 
 	httpd->open_connections++;
 	httpd->connections[i].socket_fd = fd;
+    httpd->connections[i].received_bytes = 0;
+    httpd->connections[i].request_count = 0;
 #ifndef _WIN32
     { struct timeval timeout={1,0};setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout)); }
 #endif
@@ -187,6 +191,28 @@ httpd_remove_connection(httpd_t *httpd, http_connection_t *connection)
 	closesocket(connection->socket_fd);
 	connection->connected = 0;
 	httpd->open_connections--;
+}
+
+/* Log only fixed route labels, never URL queries, headers or request bodies. */
+static void httpd_trace_request(httpd_t *httpd, http_connection_t *connection,
+                                http_request_t *request, http_response_t *response) {
+    static const char *routes[] = {"/info", "/pair-setup", "/pair-verify", "/fp-setup",
+        "/feedback", "/server-info", "/reverse", "/play", "/stop", "/photo", "/rate", "/scrub", "/playback-info"};
+    const char *method = http_request_get_method(request), *url = http_request_get_url(request);
+    const char *label = url && url[0] == '/' ? "<other>" : "<session>";
+    unsigned i; int status = 0, length;
+    if (!method || !url) return; /* Reverse-channel response, not a request. */
+    for (i = 0; i < sizeof(routes)/sizeof(routes[0]); ++i) {
+        size_t n = strlen(routes[i]);
+        if (!strncmp(url, routes[i], n) && (!url[n] || url[n] == '?')) { label = routes[i]; break; }
+    }
+    if (response) {
+        const char *wire = http_response_get_data(response, &length);
+        if (sscanf(wire, "%*15s %d", &status) != 1) status = 0;
+    }
+    ++connection->request_count;
+    logger_log(httpd->logger, LOGGER_INFO, "AirPlay socket %d: %s %s status=%d",
+        connection->socket_fd, method, label, status);
 }
 
 static THREAD_RETVAL
@@ -302,58 +328,76 @@ httpd_thread(void *arg)
 			logger_log(httpd->logger, LOGGER_DEBUG, "Receiving on socket %d", connection->socket_fd);
 			ret = recv(connection->socket_fd, buffer, sizeof(buffer), 0);
 			if (ret <= 0) {
-                if(ret<0 && errno==EINTR)continue;
-				logger_log(httpd->logger, LOGGER_INFO, "Connection closed for socket %d", connection->socket_fd);
+                if(ret<0 && (errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK))continue;
+				logger_log(httpd->logger, LOGGER_INFO, "Socket %d closed: %s errno=%d received=%lu requests=%u",
+                    connection->socket_fd, ret == 0 ? "peer EOF" : "receive error", ret == 0 ? 0 : errno,
+                    connection->received_bytes, connection->request_count);
 				httpd_remove_connection(httpd, connection);
 				continue;
 			}
 
-			/* Parse HTTP request from data read from connection */
-			http_request_add_data(connection->request, buffer, ret);
-			if (http_request_has_error(connection->request)) {
-				logger_log(httpd->logger, LOGGER_INFO, "Error in parsing: %s", http_request_get_error_name(connection->request));
-				httpd_remove_connection(httpd, connection);
-				continue;
-			}
+            connection->received_bytes += (unsigned)ret;
+            {
+                int available = ret, offset = 0;
+                while (offset < available && connection->connected) {
+                    int consumed;
+                    if (!connection->request) connection->request = http_request_init();
+                    assert(connection->request);
+                    consumed = http_request_add_data(connection->request, buffer + offset, available - offset);
+                    if (http_request_has_error(connection->request)) {
+                        logger_log(httpd->logger, LOGGER_INFO, "Error in parsing: %s", http_request_get_error_name(connection->request));
+                        httpd_remove_connection(httpd, connection);
+                        break;
+                    }
+                    if (consumed < 0 || (consumed == 0 && !http_request_is_complete(connection->request))) {
+                        logger_log(httpd->logger, LOGGER_INFO, "Parser made no progress on socket %d", connection->socket_fd);
+                        httpd_remove_connection(httpd, connection); break;
+                    }
+                    offset += consumed;
 
-			/* If request is finished, process and deallocate */
-			if (http_request_is_complete(connection->request)) {
-				http_response_t *response = NULL;
-				httpd->callbacks.conn_request(connection->user_data, connection->request, &response);
-				http_request_destroy(connection->request);
-				connection->request = NULL;
+                    /* If request is finished, process and deallocate */
+                    if (http_request_is_complete(connection->request)) {
+                        http_response_t *response = NULL;
+                        httpd->callbacks.conn_request(connection->user_data, connection->request, &response);
+                        httpd_trace_request(httpd, connection, connection->request, response);
+                        http_request_destroy(connection->request);
+                        connection->request = NULL;
 
-				if (response) {
-					const char *data;
-					int datalen;
-					int written;
-					int ret;
+                        if (response) {
+                            const char *data;
+                            int datalen;
+                            int written;
+                            int ret;
 
-					/* Get response data and datalen */
-					data = http_response_get_data(response, &datalen);
+                            /* Get response data and datalen */
+                            data = http_response_get_data(response, &datalen);
 
-					written = 0;
-					while (written < datalen) {
-						ret = send(connection->socket_fd, data+written, datalen-written, MSG_NOSIGNAL);
-						if (ret <= 0) {
-							/* Closed or failed peer. */
-							logger_log(httpd->logger, LOGGER_INFO, "Error in sending data");
-							break;
-						}
-						written += ret;
-					}
+                            written = 0;
+                            while (written < datalen) {
+                                ret = send(connection->socket_fd, data+written, datalen-written, MSG_NOSIGNAL);
+                                if (ret < 0 && errno == EINTR) continue;
+                                if (ret <= 0) {
+                                    /* Closed or failed peer. */
+                                    logger_log(httpd->logger, LOGGER_INFO, "Send failed on socket %d errno=%d", connection->socket_fd, ret == 0 ? 0 : errno);
+                                    break;
+                                }
+                                written += ret;
+                            }
 
-					if (http_response_get_disconnect(response)) {
-						logger_log(httpd->logger, LOGGER_INFO, "Disconnecting on software request");
-						httpd_remove_connection(httpd, connection);
-					}
-				} else {
-					logger_log(httpd->logger, LOGGER_INFO, "Didn't get response");
-				}
-				http_response_destroy(response);
-			} else {
-				logger_log(httpd->logger, LOGGER_DEBUG, "Request not complete, waiting for more data...");
-			}
+                            if (written != datalen || http_response_get_disconnect(response)) {
+                                logger_log(httpd->logger, LOGGER_INFO, "Disconnecting on software request");
+                                httpd_remove_connection(httpd, connection);
+                            }
+                        } else {
+                            logger_log(httpd->logger, LOGGER_INFO, "Didn't get response");
+                        }
+                        http_response_destroy(response);
+                    } else {
+                        logger_log(httpd->logger, LOGGER_DEBUG, "Request not complete, waiting for more data...");
+                        break;
+                    }
+                }
+            }
 		}
 	}
 

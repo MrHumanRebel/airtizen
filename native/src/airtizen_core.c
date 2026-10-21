@@ -4,6 +4,7 @@
 #include "airtizen_metadata.h"
 #include "airtizen_photo.h"
 #include "airtizen_playback.h"
+#include "airtizen_mdns.h"
 #include "raop.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -181,6 +182,13 @@ int airtizen_core_start(const char *device_name) {
     pthread_mutex_unlock(&g_lock);
     g_raop = raop_init(4, &cb);
     if (!g_raop) { fail("raop_init_failed"); return -1; }
+    {
+        unsigned char key[32];
+        raop_get_public_key(g_raop, key);
+        if (airtizen_mdns_set_public_key(key)) {
+            raop_destroy(g_raop); g_raop = NULL; fail("discovery_identity_failed"); return -1;
+        }
+    }
     raop_set_log_level(g_raop, RAOP_LOG_INFO);
     raop_set_log_callback(g_raop, log_cb, NULL);
     rc = raop_start(g_raop, &port);

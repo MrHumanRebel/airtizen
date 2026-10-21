@@ -13,6 +13,8 @@ static int16_t received[16];
 static size_t received_bytes;
 static int open_result;
 raop_t *raop_init(int clients, raop_callbacks_t *cb) { (void)clients; callbacks=*cb; return (raop_t *)1; }
+void raop_get_public_key(raop_t *r, unsigned char key[32]) { (void)r; memset(key, 1, 32); }
+int airtizen_mdns_set_public_key(const unsigned char key[32]) { assert(key[0] == 1); return 0; }
 void raop_set_log_level(raop_t *r,int l) { (void)r;(void)l; }
 void raop_set_log_callback(raop_t *r,raop_log_callback_t cb,void *cls) { (void)r;(void)cb;(void)cls; }
 int raop_start(raop_t *r,unsigned short *p) { (void)r;(void)p;return 1; }

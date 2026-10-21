@@ -112,7 +112,10 @@ static void expect_closed(void) {
 
 int main(void) {
     unsigned cycle;
+    unsigned char key[32];
+    memset(key, 0x5a, sizeof(key));
     assert(airtizen_mdns_set_network("192.0.2.20", "020000000001") == 0);
+    assert(airtizen_mdns_set_public_key(key) == 0);
     fail_ttl = 1;
     assert(airtizen_mdns_start("Sandbox TV", NULL, 5000) < 0);
     assert(!strcmp(airtizen_mdns_last_error(), "mdns_ttl_failed_errno_1"));
@@ -125,7 +128,8 @@ int main(void) {
     fail_join = 0;
     for (cycle = 0; cycle < 2; ++cycle) {
         struct timespec deadline;
-        int result = airtizen_mdns_start("Sandbox TV", NULL, 5000);
+        const char *receiver = cycle ? "123456789012345678901234567890123456789012345678" : "Sandbox TV";
+        int result = airtizen_mdns_start(receiver, NULL, 5000);
         if (result) fprintf(stderr, "Discovery startup rejected: %s\n", airtizen_mdns_last_error());
         assert(result == 0);
         assert(airtizen_mdns_is_running() && !airtizen_mdns_last_error()[0]);

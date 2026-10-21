@@ -1099,6 +1099,7 @@ reexecute:
         switch (ch) {
           case 'H':
           case 'R':
+            parser->rtsp = ch == 'R';
             UPDATE_STATE(s_req_http_H);
             break;
           case ' ':
@@ -1115,7 +1116,7 @@ reexecute:
         break;
 
       case s_req_http_HT:
-        STRICT_CHECK(ch != 'T');
+        STRICT_CHECK(ch != (parser->rtsp ? 'S' : 'T'));
         UPDATE_STATE(s_req_http_HTT);
         break;
 

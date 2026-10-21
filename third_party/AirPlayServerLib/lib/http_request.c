@@ -135,6 +135,9 @@ on_message_complete(http_parser *parser)
 
 	request->method = http_method_str(request->parser.method);
 	request->complete = 1;
+	/* Return consumed bytes at this message boundary, preserving pipelined
+	 * requests for the connection loop instead of merging their fields. */
+	http_parser_pause(parser, 1);
 	return 0;
 }
 
@@ -199,7 +202,13 @@ int
 http_request_has_error(http_request_t *request)
 {
 	assert(request);
-	return (HTTP_PARSER_ERRNO(&request->parser) != HPE_OK);
+	return HTTP_PARSER_ERRNO(&request->parser) != HPE_OK &&
+        !(request->complete && HTTP_PARSER_ERRNO(&request->parser) == HPE_PAUSED);
+}
+
+const char *http_request_get_protocol(http_request_t *request) {
+    if (request->parser.rtsp) return "RTSP/1.0";
+    return request->parser.http_minor == 0 ? "HTTP/1.0" : "HTTP/1.1";
 }
 
 const char *

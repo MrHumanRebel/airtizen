@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <assert.h>
 
 #include "http_response.h"
@@ -23,6 +24,7 @@
 struct http_response_s {
 	int complete;
 	int disconnect;
+    int content_length_set;
 
 	char *data;
 	int data_size;
@@ -40,12 +42,13 @@ http_response_add_data(http_response_t *response, const char *data, int datalen)
 	assert(datalen > 0);
 
 	newdatasize = response->data_size;
-	while (response->data_size+datalen > newdatasize) {
+	while (response->data_length+datalen > newdatasize) {
 		newdatasize *= 2;
 	}
 	if (newdatasize != response->data_size) {
 		response->data = realloc(response->data, newdatasize);
 		assert(response->data);
+        response->data_size = newdatasize;
 	}
 	memcpy(response->data+response->data_length, data, datalen);
 	response->data_length += datalen;
@@ -113,6 +116,7 @@ http_response_add_header(http_response_t *response, const char *name, const char
 	assert(response);
 	assert(name);
 	assert(value);
+    if (!strcasecmp(name, "Content-Length")) response->content_length_set = 1;
 
 	http_response_add_data(response, name, strlen(name));
 	http_response_add_data(response, ": ", 2);
@@ -143,6 +147,8 @@ http_response_finish(http_response_t *response, const char *data, int datalen)
 		http_response_add_data(response, data, datalen);
 	} else {
 		/* Add extra end of line after headers */
+        if (!response->content_length_set)
+            http_response_add_header(response, "Content-Length", "0");
 		http_response_add_data(response, "\r\n", 2);
 	}
 	response->complete = 1;
