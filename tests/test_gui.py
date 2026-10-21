@@ -124,6 +124,34 @@ class GUI(unittest.TestCase):
         self.assertEqual(self.page.evaluate('window.AirTizenEmbedded.phase'),'failed')
         self.assertIn('No active TV IPv4',self.page.evaluate('window.AirTizenEmbedded.error'))
 
+    def test_platform_mac_stays_stable_without_browser_storage(self):
+        self.context.add_init_script("""Object.defineProperty(window,'localStorage',{get:function(){throw new Error('storage disabled');}});
+            window.tizen={systeminfo:{getPropertyValue:function(name,ok){
+                ok({ipAddress:'192.0.2.20',macAddress:'00:11:22:33:44:66'});
+            }}};""")
+        url='http://127.0.0.1:'+str(self.server.server_port)+'/index.html'
+        for _ in range(2):
+            self.page.goto(url)
+            expect(self.page.locator('#receiver-module embed')).to_have_attribute('receiver-id','001122334466')
+
+    def test_saved_receiver_identity_survives_new_mac_source(self):
+        self.context.add_init_script("""localStorage.setItem('airtizen.receiverId','D21122334466');
+            window.tizen={systeminfo:{getPropertyValue:function(name,ok){
+                ok({ipAddress:'192.0.2.20',macAddress:'00:11:22:33:44:66'});
+            }}};""")
+        self.page.goto('http://127.0.0.1:'+str(self.server.server_port)+'/index.html')
+        expect(self.page.locator('#receiver-module embed')).to_have_attribute('receiver-id','D21122334466')
+
+    def test_missing_mac_and_unusable_storage_does_not_change_identity_silently(self):
+        self.context.add_init_script("""Object.defineProperty(window,'localStorage',{get:function(){throw new Error('storage disabled');}});
+            window.tizen={systeminfo:{getPropertyValue:function(name,ok){
+                ok({ipAddress:'192.0.2.20',macAddress:'FF:FF:FF:FF:FF:FF'});
+            }}};""")
+        self.page.goto('http://127.0.0.1:'+str(self.server.server_port)+'/index.html')
+        self.assertEqual(self.page.locator('#receiver-module').count(),0)
+        self.assertEqual(self.page.evaluate('window.AirTizenEmbedded.phase'),'failed')
+        self.assertIn('Receiver identity cannot be saved',self.page.evaluate('window.AirTizenEmbedded.error'))
+
     def test_remote_text_is_not_html(self):
         with urllib.request.urlopen('http://127.0.0.1:45110/status') as response:
             data=json.load(response)

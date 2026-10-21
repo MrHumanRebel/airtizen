@@ -95,7 +95,7 @@ class PhotoShare(unittest.TestCase):
                     errors = []
                     # Exercise the real token bootstrap against the host receiver.
                     # Desktop Chrome cannot execute NaCl; fixed randomness here is a test fixture only.
-                    page.add_init_script('window.crypto.getRandomValues = function(a) { var hex=' + json.dumps(CONTROL_TOKEN) + '; for(var i=0;i<a.length;i++) a[i]=parseInt(hex.substr(i*2,2),16); return a; }; window.tizen={systeminfo:{getPropertyValue:function(n,ok){ok({ipAddress:"192.0.2.20"});}}};')
+                    page.add_init_script('window.crypto.getRandomValues = function(a) { var hex=' + json.dumps(CONTROL_TOKEN) + '; for(var i=0;i<a.length;i++) a[i]=parseInt(hex.substr(i*2,2),16); return a; }; window.tizen={systeminfo:{getPropertyValue:function(n,ok){ok({ipAddress:"192.0.2.20",macAddress:"02:11:22:33:44:66"});}}};')
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.set_content('<iframe name="tv" sandbox="allow-scripts" style="width:1920px;height:1080px" src="http://127.0.0.1:' + str(server.server_port) + '/app/index.html"></iframe>')
                     ui = page.frame(name='tv')

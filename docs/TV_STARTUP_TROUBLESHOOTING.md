@@ -1,5 +1,70 @@
 # Samsung Tizen 3.0 receiver startup failures
 
+## 2.2.30: iPhone sends only OPTIONS, then closes
+
+The October 21 follow-up in [issue #22](https://github.com/MrHumanRebel/airtizen/issues/22)
+confirms that the updated `/info`, HTTP support and public-key TXT records
+reach a real UE65MU6405 running Tizen 3.0. The iPhone on iOS 27.0.1 still
+does not display media. Its connection completes only `OPTIONS`, then closes
+after five seconds with `received=114 requests=1`. It does not reach `/info`,
+pairing or stream setup. A manual probe also establishes that the receiver
+omits `Apple-Response` when given `Apple-Challenge`.
+
+The missing response is a reproducible interoperability defect. The report
+does not contain the iPhone's request headers, however, so it does **not**
+establish that the iPhone sent a challenge or that this omission caused its
+disconnect. The earlier metadata fix is verified by the physical retest;
+complete sender compatibility is not.
+
+The new challenge handler constructs the legacy RAOP response using the
+published AirPort RSA-2048 compatibility key and existing bundled crypto:
+challenge bytes, the actual connection's local IPv4/IPv6 address and the six
+bytes of the advertised device ID. It zero-pads the payload to at least 32
+bytes, applies raw PKCS#1 v1.5 type-1 signing and returns unpadded base64 in
+`Apple-Response`. This public compatibility key is separate from the
+receiver's Ed25519 pairing key and does not prove device trust. The handler
+accepts canonical padded or unpadded base64 for 1..16 challenge bytes;
+malformed or oversized values receive a bounded, empty 400 response.
+Internal signing failure receives 503. No extra crypto library, service or
+relay is required.
+
+Host regressions recover the complete RSA block with an independent public
+key and check its padding, challenge, local socket address and advertised
+identity. They continue through real Ed25519/X25519 pair verification on the
+same HTTP or RTSP connection. The old 2.2.30 executable fails the new check
+because `Apple-Response` is missing. Fixed IPv4 and IPv6 crypto vectors cover
+the different payload lengths; the receiver listener and discovery remain
+IPv4, so this does not claim IPv6 network support. Package validation now
+also requires the actual `airtizen_apple_response` implementation in the ARM
+module. These are host/build checks, not a physical iPhone retest.
+
+Receiver identity no longer silently changes whenever browser storage fails.
+An existing saved ID is preserved. Otherwise the bootstrap uses the active
+network's valid unicast `macAddress`, documented for [Tizen systeminfo Wi-Fi
+since 2.3 and Ethernet since 2.4](https://developer.samsung.com/smarttv/develop/api-references/tizen-web-device-api-references/systeminfo-api.html).
+If no MAC is available, a generated local ID must survive a storage readback
+before launch; failure produces an explicit diagnostic instead of a new ID
+on every launch. Browser regressions exercise blocked storage, reloads and
+preservation of the old ID when a MAC becomes available. Reinstallation
+that erases a previous random ID can still cause a one-time transition to
+the platform MAC; changing interfaces can change the fallback MAC. Erased
+random identities cannot be reconstructed. Ed25519 keys still belong to a
+receiver instance; this is not persistent sender authorization.
+
+On the next TV attempt, inspect new native entries after the current launch:
+
+- `Apple-Challenge answered: RSA-2048 response signed`
+- `OPTIONS probe: Apple-Challenge absent`
+- `Apple-Challenge rejected: malformed input` or `Apple-Challenge signing failed`
+
+Challenge and signature values are never logged. If the iPhone again stops
+after an OPTIONS probe **without** a challenge, the absent RSA response
+cannot explain that probe's failure; retain its request/status and closure
+counters for the next investigation. `Clear local log` intentionally clears
+the web log only, so use timestamps to distinguish retained native entries.
+Feature mask `0x4803a383,0x0` and model `AirTizen1,1` remain unchanged; adding
+unimplemented authentication/clock features would not supply those protocols.
+
 ## 2.2.29: discovery succeeds, but the iPhone disconnects
 
 [Issue #22](https://github.com/MrHumanRebel/airtizen/issues/22) reports working
