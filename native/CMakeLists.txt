@@ -83,6 +83,7 @@ pkg_check_modules(AIRTIZEN_AVCODEC REQUIRED IMPORTED_TARGET libavformat>=61 liba
 
 add_library(airtizen_core STATIC
   src/airtizen_core.c
+  src/airtizen_apple_challenge.c
   src/airtizen_json.c
   src/airtizen_alac.c
   src/airtizen_aac.c
@@ -145,6 +146,10 @@ if(AIRTIZEN_BUILD_TIZEN_SERVICE)
 endif()
 
 if(BUILD_TESTING AND NOT AIRTIZEN_BUILD_TIZEN_SERVICE AND NOT AIRTIZEN_BUILD_NACL_MODULE)
+  add_executable(airtizen_apple_challenge_test ../tests/test_apple_challenge.c)
+  target_link_libraries(airtizen_apple_challenge_test PRIVATE airtizen_core)
+  target_compile_options(airtizen_apple_challenge_test PRIVATE -UNDEBUG)
+  add_test(NAME apple_challenge_vectors COMMAND airtizen_apple_challenge_test)
   add_executable(airtizen_http_response_test ../tests/test_http_response.c "${AIRPLAY_DIR}/http_response.c")
   target_compile_options(airtizen_http_response_test PRIVATE -UNDEBUG)
   target_link_options(airtizen_http_response_test PRIVATE "-Wl,--wrap=malloc,--wrap=realloc")

@@ -7,6 +7,7 @@ REQUIRED_SYMBOLS = frozenset({
     'PPP_InitializeModule', 'PPP_GetInterface', 'PPP_ShutdownModule',
     'PpapiPluginMain', 'main', 'airtizen_runtime_start',
     'airtizen_aac_create', 'airtizen_alac_create',
+    'airtizen_apple_response',
     'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
     'airtizen_nacl_udp_multicast_v1',
 })

@@ -14,6 +14,20 @@ The top-level MIT license applies to original AirTizen work; it does not relicen
 
 This is an initial inventory, not a completed licensing/provenance audit. The combined native binary must not be described as MIT-only. Resolve redistribution compatibility and include the required complete notices, corresponding source and build material for native binary distribution. No UxPlay or Moonlight implementation was imported as part of the research.
 
+## Legacy RAOP challenge interoperability data
+
+`native/ports/airport_key.h` contains the publicly documented AirPort RSA
+interoperability key from [Shairplay's `airport.key` at
+096b61ad14c90169f438e690d096e3fcf87e504e](https://github.com/juhovh/shairplay/blob/096b61ad14c90169f438e690d096e3fcf87e504e/airport.key).
+The upstream data file SHA-256 is
+`7cec0bf8683f595f534f6cf2636b162aec7f006324eccdf17669bbc3583f82db`.
+The same published key is used by Shairport Sync. It is protocol compatibility
+data, not an installation secret, proof of device trust or an Ed25519 pairing
+identity. AirTizen's new handler uses the existing bundled LGPL `rsakey` and
+BSD-style axTLS arithmetic implementation; no new crypto library is downloaded
+or linked. `tests/fixtures/airport-public.pem` contains only its public key for
+independent verification of the response's RSA block.
+
 ## Downloaded media dependency
 
 `scripts/build-media-deps.sh` builds a minimal static FFmpeg 7.1.5 dependency from the official FFmpeg repository, commit `3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587`. The codeload archive SHA-256 is `83220fe0807da10df19714176f02ec3d3812ef0e055f69e940d01b3ad1379cdb`. It enables AAC/ALAC/H.264 decoding, H.264 parsing and MP4 muxing, without GPL/nonfree configuration flags. FFmpeg's applicable LGPL notices and source are in the downloaded source tree (`COPYING.LGPLv2.1`, `LICENSE.md` and individual headers).

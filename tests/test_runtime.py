@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real process/socket integration checks; no Apple-device claims."""
 import concurrent.futures
+import base64
 import hashlib
 from http.client import HTTPConnection
 import json
@@ -17,6 +18,7 @@ import unittest
 import urllib.error
 import urllib.request
 from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,19 +174,23 @@ class Runtime(unittest.TestCase):
         self.verify_pairing('HTTP/1.1', False)
 
     def verify_pairing(self, protocol, cseq):
+        challenge = bytes(range(16))
         signing = ed25519.Ed25519PrivateKey.generate()
         ephemeral = x25519.X25519PrivateKey.generate()
         signing_pub = signing.public_key().public_bytes_raw()
         ephemeral_pub = ephemeral.public_key().public_bytes_raw()
         with socket.create_connection(('127.0.0.1',5000),timeout=4) as sock:
-            def exchange(path, body, sequence, method="POST"):
-                request=(f'{method} {path} {protocol}\r\n'+(f'CSeq: {sequence}\r\n' if cseq else '')+f'Content-Length: {len(body)}\r\n\r\n').encode()+body
+            def exchange(path, body, sequence, method="POST", apple_challenge=False):
+                request=(f'{method} {path} {protocol}\r\n'+(f'CSeq: {sequence}\r\n' if cseq else '')+
+                    (f'Apple-Challenge: {base64.b64encode(challenge).decode().rstrip("=")}\r\n' if apple_challenge else '')+
+                    f'Content-Length: {len(body)}\r\n\r\n').encode()+body
                 sock.sendall(request)
                 response=b''
                 while b'\r\n\r\n' not in response:
                     response+=sock.recv(8192)
                 header,payload=response.split(b'\r\n\r\n',1)
                 self.assertTrue(header.startswith((protocol+' 200 OK').encode()))
+                if apple_challenge:self.assert_apple_response(header,challenge,'127.0.0.1')
                 fields=dict(line.split(b': ',1) for line in header.split(b'\r\n')[1:])
                 length=int(fields.get(b'Content-Length',b'0'))
                 while len(payload)<length:
@@ -192,6 +198,7 @@ class Runtime(unittest.TestCase):
                     if not block: self.fail('Receiver closed handshake early')
                     payload+=block
                 return payload
+            exchange('*',b'',0,'OPTIONS',True)
             info=plistlib.loads(exchange('/info',b'',1,'GET'))
             server_signing=exchange('/pair-setup',signing_pub,2)
             self.assertEqual(info['pk'],server_signing)
@@ -231,6 +238,51 @@ class Runtime(unittest.TestCase):
         self.assertEqual({item['type'] for item in info['audioLatencies']},{100,101})
         self.assertFalse(info['keepAliveLowPower'])
         self.assertFalse(info['keepAliveSendStatsAsBody'])
+
+    def assert_apple_response(self, header, challenge, local_ip):
+        fields=dict(line.split(b': ',1) for line in header.split(b'\r\n')[1:])
+        self.assertIn(b'Apple-Response',fields)
+        encoded=fields[b'Apple-Response']
+        self.assertNotIn(b'=',encoded)
+        signature=base64.b64decode(encoded+b'==',validate=True)
+        self.assertEqual(len(signature),256)
+        public=serialization.load_pem_public_key((ROOT/'tests/fixtures/airport-public.pem').read_bytes()).public_numbers()
+        block=pow(int.from_bytes(signature,'big'),public.e,public.n).to_bytes(256,'big')
+        with urllib.request.urlopen('http://127.0.0.1:5000/info',timeout=2) as response:
+            device_id=plistlib.loads(response.read())['deviceID']
+        address=socket.inet_pton(socket.AF_INET6 if ':' in local_ip else socket.AF_INET,local_ip)
+        payload=challenge+address+bytes.fromhex(device_id.replace(':',''))
+        payload=payload.ljust(32,b'\0')
+        self.assertEqual(block,b'\0\1'+b'\xff'*(256-len(payload)-3)+b'\0'+payload)
+
+    def test_apple_challenge_encodings_and_rejections(self):
+        for size in (1,2,3,15,16):
+            challenge=bytes(range(size))
+            for padded in (True,False):
+                text=base64.b64encode(challenge).decode()
+                if not padded:text=text.rstrip('=')
+                reply=rtsp('OPTIONS',headers={'Apple-Challenge':text})
+                header=reply.split(b'\r\n\r\n',1)[0]
+                self.assertTrue(header.startswith(b'RTSP/1.0 200 OK'))
+                self.assert_apple_response(header,challenge,'127.0.0.1')
+        for text in ('','!','A','AB','AQ===','AQ==trailing','====',base64.b64encode(bytes(17)).decode()):
+            reply=rtsp('OPTIONS',headers={'Apple-Challenge':text})
+            self.assertTrue(reply.startswith(b'RTSP/1.0 400 Bad Request'),reply)
+            self.assertNotIn(b'Apple-Response:',reply)
+            self.assertIn(b'Content-Length: 0\r\n',reply)
+        self.assertEqual(http()[0],200)
+
+    def test_apple_challenge_diagnostics_exclude_challenge_and_signature(self):
+        challenge=secrets.token_bytes(16);text=base64.b64encode(challenge).decode().rstrip('=')
+        reply=rtsp('OPTIONS',headers={'Apple-Challenge':text})
+        fields=dict(line.split(b': ',1) for line in reply.split(b'\r\n\r\n',1)[0].split(b'\r\n')[1:])
+        logs='\n'.join(http()[1]['logs'])
+        self.assertIn('Apple-Challenge answered: RSA-2048 response signed',logs)
+        self.assertNotIn(text,logs)
+        self.assertNotIn(fields[b'Apple-Response'].decode(),logs)
+        reply=rtsp('OPTIONS')
+        self.assertNotIn(b'Apple-Response:',reply)
+        self.assertIn('OPTIONS probe: Apple-Challenge absent','\n'.join(http()[1]['logs']))
 
     @staticmethod
     def txt_fields(data):

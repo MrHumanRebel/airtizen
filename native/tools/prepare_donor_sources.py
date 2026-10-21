@@ -57,7 +57,7 @@ write("raop_handlers.generated.h", handlers)
 raop = read("raop.c").replace('"raop_handlers.h"', '"raop_handlers.generated.h"')
 raop += '\nvoid raop_get_public_key(raop_t *raop, unsigned char key[32]) { pairing_get_public_key(raop->pairing, key); }\n'
 raop = raop.replace('struct raop_conn_s {', 'struct raop_conn_s {\n    int photo_seen;\n    unsigned photo_session;\n    int reverse, event_waiting, event_state;\n    unsigned event_generation;\n    uint64_t event_time;\n    char event_session[65];')
-raop = raop.replace('#include "raop_handlers.generated.h"', '#include "raop_handlers.generated.h"\n#include "airtizen_raop_guard.h"\n#include "airtizen_airplay_http.h"\n#include "airtizen_reverse.h"')
+raop = raop.replace('#include "raop_handlers.generated.h"', '#include "raop_handlers.generated.h"\n#include "airtizen_raop_guard.h"\n#include "airtizen_airplay_http.h"\n#include "airtizen_reverse.h"\n#include "airtizen_raop_challenge.h"')
 raop = raop.replace('if (!method || !cseq) {', """if (conn->reverse) { if (!url) conn->event_waiting=0; else conn->reverse=-1; return; }
     if (airtizen_reverse_upgrade(conn, request, response)) return;
     if (airtizen_airplay_http(request, response)) return;
@@ -69,6 +69,8 @@ raop = raop.replace('if (!method || !cseq) {', """if (conn->reverse) { if (!url)
     if (!method || !url) {""")
 raop = raop.replace('!strcmp(url, "/info")', 'airtizen_info_path(url)')
 raop = raop.replace('http_response_add_header(*response, "CSeq", cseq);', 'if (cseq) http_response_add_header(*response, "CSeq", cseq);')
+raop = raop.replace('http_response_add_header(*response, "Server", "AirTunes/845.5.1");',
+    'http_response_add_header(*response, "Server", "AirTunes/845.5.1");\n    if (airtizen_raop_challenge(conn, request, response)) return;')
 raop = raop.replace('*response = http_response_init("RTSP/1.0", 200, "OK");', """int validation = airtizen_validate_request(conn, request);
     if (validation) {
         *response = http_response_init(http_request_get_protocol(request), validation,
