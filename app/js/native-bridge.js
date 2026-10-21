@@ -102,7 +102,7 @@
           if (remoteLines[i]) log('[runtime] ' + remoteLines[i]);
         }
       }
-      return { ok:true, status:this.lastStatus, service:res.service || "running", protocols:res.protocols || {}, nowPlaying:res.nowPlaying || {}, capabilities:res.capabilities || {}, audio:res.audio || {}, video:res.video || {}, receiverName:res.receiverName || "AirTizen TV" };
+      return { ok:true, status:this.lastStatus, service:res.service || "running", discovery:res.discovery || {}, protocols:res.protocols || {}, nowPlaying:res.nowPlaying || {}, capabilities:res.capabilities || {}, audio:res.audio || {}, video:res.video || {}, receiverName:res.receiverName || "AirTizen TV" };
     }
 
     this.runtimeReachable = false;
@@ -134,6 +134,14 @@
     log('stop requested');
     xhrJson('POST', '/stop', null, function(res){
       if (cb) cb(self.applyRuntimeResult(res, 'stop'));
+    });
+  };
+  NativeBridge.prototype.discovery = function(profile, cb){
+    var self = this;
+    if (profile !== 'native' && profile !== 'uxplay-test') { if (cb) cb({ok:false,error:'invalid discovery profile'}); return; }
+    log('discovery profile requested: ' + profile);
+    xhrJson('POST', '/discovery/' + profile, null, function(res){
+      if (cb) cb(self.applyRuntimeResult(res, 'discovery'));
     });
   };
 

@@ -34,10 +34,43 @@ static char g_public_key[65];
 static unsigned short g_port = 5000;
 static struct in_addr g_address;
 static int g_network_override;
+static int g_uxplay_test;
 static char g_start_error[80];
 const char *airtizen_mdns_last_error(void) { return g_start_error; }
 static void start_error(const char *stage, int error) {
     snprintf(g_start_error, sizeof(g_start_error), "mdns_%s_failed_errno_%d", stage, error);
+}
+
+static const char *selected_features_txt(void) { return g_uxplay_test ? AIRTIZEN_UXPLAY_TEST_FEATURES_TXT : AIRTIZEN_NATIVE_FEATURES_TXT; }
+static const char *selected_model(void) { return g_uxplay_test ? "AppleTV3,2" : "AirTizen1,1"; }
+int airtizen_discovery_set_profile(const char *profile) {
+    int experimental;
+    if (!profile || (strcmp(profile, "native") && strcmp(profile, "uxplay-test"))) return -1;
+    experimental = !strcmp(profile, "uxplay-test");
+    pthread_mutex_lock(&g_identity_lock);
+    if (g_running && experimental != g_uxplay_test) { pthread_mutex_unlock(&g_identity_lock); return -1; }
+    g_uxplay_test = experimental;
+    pthread_mutex_unlock(&g_identity_lock); return 0;
+}
+const char *airtizen_discovery_profile(void) {
+    const char *value;
+    pthread_mutex_lock(&g_identity_lock); value = g_uxplay_test ? "uxplay-test" : "native";
+    pthread_mutex_unlock(&g_identity_lock); return value;
+}
+const char *airtizen_discovery_model(void) {
+    const char *value;
+    pthread_mutex_lock(&g_identity_lock); value = selected_model();
+    pthread_mutex_unlock(&g_identity_lock); return value;
+}
+const char *airtizen_discovery_features_txt(void) {
+    const char *value;
+    pthread_mutex_lock(&g_identity_lock); value = selected_features_txt();
+    pthread_mutex_unlock(&g_identity_lock); return value;
+}
+uint64_t airtizen_discovery_features(void) {
+    uint64_t value;
+    pthread_mutex_lock(&g_identity_lock); value = g_uxplay_test ? AIRTIZEN_UXPLAY_TEST_FEATURES : AIRTIZEN_FEATURES;
+    pthread_mutex_unlock(&g_identity_lock); return value;
 }
 
 int airtizen_mdns_set_public_key(const unsigned char key[32]) {
@@ -140,11 +173,11 @@ static int srv(unsigned char *b, int p, const char *instance, unsigned short por
 }
 
 static int txt_raop_data(unsigned char *b, int p) {
-    char key[68];
+    char key[68], field[64];
     p = txt(b, p, "txtvers=1");
     p = txt(b, p, "ch=2");
     p = txt(b, p, "md=0,1,2");
-    p = txt(b, p, "cn=1,2,3");
+    p = txt(b, p, g_uxplay_test ? "cn=0,1,2,3" : "cn=1,2,3");
     p = txt(b, p, "da=true");
     p = txt(b, p, "et=0,3,5");
     p = txt(b, p, "pw=false");
@@ -152,21 +185,24 @@ static int txt_raop_data(unsigned char *b, int p) {
     p = txt(b, p, "ss=16");
     p = txt(b, p, "tp=UDP");
     p = txt(b, p, "vn=65537");
-    p = txt(b, p, "vs=220.68");
+    p = txt(b, p, "vs=" AIRTIZEN_SOURCE_VERSION);
     p = txt(b, p, "sf=0x4");
+    snprintf(field, sizeof(field), "ft=%s", selected_features_txt()); p = txt(b, p, field);
+    snprintf(field, sizeof(field), "am=%s", selected_model()); p = txt(b, p, field);
+    if (g_uxplay_test) { p = txt(b, p, "rhd=5.6.0.0"); p = txt(b, p, "sv=false"); }
     if (g_public_key[0]) { snprintf(key, sizeof(key), "pk=%s", g_public_key); p = txt(b, p, key); }
     return p;
 }
 
 static int txt_airplay_data(unsigned char *b, int p) {
-    char key[68], identifier[40];
+    char key[68], identifier[40], field[64];
     char deviceid[40];
     snprintf(deviceid, sizeof(deviceid), "deviceid=%.2s:%.2s:%.2s:%.2s:%.2s:%.2s", g_id, g_id+2, g_id+4, g_id+6, g_id+8, g_id+10);
     p = txt(b, p, deviceid);
-    p = txt(b, p, AIRTIZEN_FEATURES_TXT);
+    snprintf(field, sizeof(field), "features=%s", selected_features_txt()); p = txt(b, p, field);
     p = txt(b, p, "flags=0x4");
-    p = txt(b, p, "model=AirTizen1,1");
-    p = txt(b, p, "srcvers=220.68");
+    snprintf(field, sizeof(field), "model=%s", selected_model()); p = txt(b, p, field);
+    p = txt(b, p, "srcvers=" AIRTIZEN_SOURCE_VERSION);
     p = txt(b, p, "vv=2");
     if (g_public_key[0]) { snprintf(key, sizeof(key), "pk=%s", g_public_key); p = txt(b, p, key); }
     snprintf(identifier, sizeof(identifier), "pi=00000000-0000-4000-8000-%.12s", g_id);

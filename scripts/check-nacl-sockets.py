@@ -22,6 +22,7 @@ def check(module, sdk):
                 'PpapiPluginMain', 'main', 'airtizen_runtime_start',
                 'airtizen_aac_create', 'airtizen_alac_create',
                 'airtizen_apple_response',
+                'airtizen_runtime_set_discovery_profile',
                 'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
                 'airtizen_nacl_udp_multicast_v1'}
     missing_runtime = required - all_symbols

@@ -254,6 +254,19 @@ http_request_get_header(http_request_t *request, const char *name)
 	return NULL;
 }
 
+unsigned http_request_get_header_count(http_request_t *request) {
+    assert(request);
+    return (unsigned)request->headers_size / 2;
+}
+const char *http_request_get_header_name(http_request_t *request, unsigned index) {
+    assert(request);
+    return index < http_request_get_header_count(request) ? request->headers[2*index] : NULL;
+}
+const char *http_request_get_header_value(http_request_t *request, unsigned index) {
+    assert(request);
+    return index < http_request_get_header_count(request) ? request->headers[2*index + 1] : NULL;
+}
+
 const char *
 http_request_get_data(http_request_t *request, int *datalen)
 {

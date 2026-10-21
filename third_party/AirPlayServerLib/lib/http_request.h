@@ -30,6 +30,9 @@ const char *http_request_get_method(http_request_t *request);
 const char *http_request_get_protocol(http_request_t *request);
 const char *http_request_get_url(http_request_t *request);
 const char *http_request_get_header(http_request_t *request, const char *name);
+unsigned http_request_get_header_count(http_request_t *request);
+const char *http_request_get_header_name(http_request_t *request, unsigned index);
+const char *http_request_get_header_value(http_request_t *request, unsigned index);
 const char *http_request_get_data(http_request_t *request, int *datalen);
 
 void http_request_destroy(http_request_t *request);

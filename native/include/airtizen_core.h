@@ -16,6 +16,8 @@ void airtizen_core_stop(void);
 void airtizen_core_snapshot(airtizen_core_state *out);
 /* JSON array of bounded recent logs. Caller owns the supplied buffer. */
 void airtizen_core_logs_json(char *out, size_t capacity);
+/* Append an already redacted operational diagnostic to the bounded log. */
+void airtizen_core_note(const char *message);
 #ifdef __cplusplus
 }
 #endif

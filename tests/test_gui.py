@@ -66,6 +66,7 @@ class GUI(unittest.TestCase):
         self.assertFalse(self.ui.locator('#log-overlay').is_visible())
         self.ui.get_by_role('button',name='Settings',exact=True).click()
         self.assertFalse(self.ui.locator('#diagnostics-action').is_visible())
+        self.assertFalse(self.ui.locator('#discovery-toggle').is_visible())
         self.ui.get_by_role('button',name='Developer mode: Off').click()
         self.assertEqual(self.ui.locator('#developer-toggle').get_attribute('aria-pressed'),'true')
         self.ui.get_by_role('button',name='Open diagnostics').click()
@@ -75,6 +76,33 @@ class GUI(unittest.TestCase):
         self.assertFalse(self.ui.locator('#log-overlay').is_visible())
         self.ui.get_by_role('button',name='Settings',exact=True).click()
         self.assertTrue(self.ui.get_by_role('button',name='Developer mode: On').is_visible())
+
+    def test_developer_discovery_profile_switch(self):
+        try:
+            self.ui.get_by_role('button',name='Settings',exact=True).click()
+            self.ui.get_by_role('button',name='Developer mode: Off').click()
+            expect(self.ui.locator('#discovery-note')).to_be_visible()
+            self.ui.get_by_role('button',name='Discovery profile: Native').click()
+            expect(self.ui.get_by_role('button',name='Discovery profile: UxPlay test')).to_be_visible()
+            with urllib.request.urlopen('http://127.0.0.1:45110/status') as response:state=json.load(response)
+            self.assertEqual(state['discovery']['features'],'0x5A7FFEE6,0x0')
+            self.assertEqual(state['discovery']['model'],'AppleTV3,2')
+            self.assertEqual(state['discovery']['implementedFeatures'],'0x4803a383,0x0')
+            self.assertFalse(state['capabilities']['productionReady'])
+            self.ui.get_by_role('button',name='Open diagnostics').click()
+            expect(self.ui.locator('#runtime-details')).to_contain_text('Discovery: uxplay-test')
+            panel=self.ui.locator('#log-overlay').bounding_box()
+            for button in self.ui.locator('#log-overlay button').all():
+                box=button.bounding_box();self.assertLessEqual(box['y']+box['height'],panel['y']+panel['height'])
+            self.page.keyboard.press('Escape')
+            self.ui.get_by_role('button',name='Settings',exact=True).click()
+            self.ui.get_by_role('button',name='Discovery profile: UxPlay test').click()
+            expect(self.ui.get_by_role('button',name='Discovery profile: Native')).to_be_visible()
+            for button in self.ui.locator('#settings-overlay button:visible').all():
+                box=button.bounding_box();self.assertGreaterEqual(box['y'],0);self.assertLessEqual(box['y']+box['height'],1080)
+        finally:
+            request=urllib.request.Request('http://127.0.0.1:45110/discovery/native',method='POST',headers={'X-AirTizen-Control':'1'})
+            urllib.request.urlopen(request,timeout=3).close()
 
     def test_remote_navigation_and_layout(self):
         self.ui.locator('#receiver-action').focus()

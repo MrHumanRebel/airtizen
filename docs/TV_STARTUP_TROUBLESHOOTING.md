@@ -1,5 +1,86 @@
 # Samsung Tizen 3.0 receiver startup failures
 
+## 2.2.31: challenge excluded; compare discovery profiles
+
+The next physical UE65MU6405/Tizen 3.0/iOS 27.0.1 test in
+[issue #22](https://github.com/MrHumanRebel/airtizen/issues/22) still receives
+one 114-byte OPTIONS request, then a peer close after five seconds. The
+request has no `Apple-Challenge`; the missing response therefore cannot
+explain this probe's failure. Manual RSA verification and the stable Wi-Fi
+MAC-derived ID pass on the TV. No `/info`, pairing or stream setup follows.
+Whether iOS rejects discovery data or another probe detail remains unknown.
+
+The new build adds the missing RAOP `ft` and `am` fields in Native mode.
+It also aligns `Server: AirTunes/220.68` with DNS-SD `vs`/`srcvers` and
+`/info`/`server-info`, and stops advertising the unhandled PAUSE method.
+These correct observable inconsistencies without claiming that they caused
+the iPhone's decision. The existing RAOP `pk` field is retained: captured
+outgoing packets and qualified `/info` records verify it in both services,
+including maximum-length names and both profiles. The reported missing
+RAOP key on the TV may involve a different observation or cached record;
+that discrepancy is not resolved by host tests.
+
+One WGT supports two profiles under Settings, with Developer mode enabled:
+
+| Field | Native (default) | UxPlay test |
+| --- | --- | --- |
+| AirPlay `features`, RAOP `ft` | `0x4803a383,0x0` | `0x5A7FFEE6,0x0` |
+| AirPlay `model`, RAOP `am` | `AirTizen1,1` | `AppleTV3,2` |
+| RAOP `cn` | `1,2,3` | `0,1,2,3` |
+| RAOP `rhd`, `sv` | absent | `5.6.0.0`, `false` |
+| RAOP `pk`, AirPlay `pk`/`pi` | current receiver identity | current receiver identity |
+| AirPlay `flags`, RAOP `sf` | `0x4` | `0x4` |
+
+The test values follow the requested comparison and the constants in
+[UxPlay `dnssdint.h` at fc156bbb8a923cb0d66b7fe4ff79fe7d8abc1db7](https://github.com/FDH2/UxPlay/blob/fc156bbb8a923cb0d66b7fe4ff79fe7d8abc1db7/lib/dnssdint.h).
+They are a discovery/negotiation experiment, not a claim to implement all
+of UxPlay's advertised functionality or reproduce its entire runtime.
+Native remains the launch default. The test profile does not add PCM,
+authentication, DRM, clock synchronization or new stream handlers. The
+status API reports `discovery.experimental`, advertised and implemented
+feature masks separately; `productionReady` remains false. `/info` and
+`server-info` use the selected model/mask, and the display rotation flag
+follows the selected mask's bit 8.
+
+Switching an active receiver sends TTL0 goodbyes with the old profile, closes
+its sessions, changes the profile and restarts with the same receiver name,
+device ID and pairing UUID. The existing core restart regenerates its
+Ed25519 key; both TXT records and `/info` use that new key. Switching a
+stopped receiver leaves it stopped. Profile selection lasts for the native
+module's lifetime and is not persisted across a full app relaunch. The
+nonce-protected, empty-body POST endpoints are `/discovery/native` and
+`/discovery/uxplay-test`; GET, missing/wrong nonces and query-token-only
+mutation attempts remain rejected.
+
+To retest:
+
+1. Install the complete new WGT and try Native first. Record the result and
+   new native lines immediately after selecting Screen Mirroring or a photo.
+2. Open Settings, enable Developer mode, then select
+   `Discovery profile: Native` to change it to `UxPlay test`. Verify
+   `Discovery: uxplay-test`, `AppleTV3,2` and the advertised mask in diagnostics.
+3. Allow six seconds for repeated announcements, close and reopen the iPhone
+   AirPlay picker, and try the same operation. Capture the profile marker,
+   request/status lines, OPTIONS header summaries and closure counters.
+4. Select `Discovery profile: UxPlay test` to restore Native. A failed
+   experiment does not establish that any advertised feature is implemented.
+
+OPTIONS diagnostics identify HTTP/RTSP, target kind (`asterisk`, `rtsp-uri`,
+`path` or `other`), body size and header count. They log canonical allowlisted
+header names and byte counts, plus only a recognized software product and
+bounded numeric version from User-Agent. Device/session IDs, addresses in
+request targets, authorization, challenge values, unknown header names and
+arbitrary User-Agent suffixes are excluded. At most 16 header summaries are
+emitted per probe; larger sets report an omitted count. Response logs include
+the prepared byte length. Native startup records the selected profile, so
+retained lines can be assigned to the correct trial. The diagnostics layout
+keeps its buttons inside the panel while logs scroll.
+
+Host checks cover complete multicast records, old-profile goodbyes, profile
+restarts and identity agreement, metadata consistency, authenticated control,
+header redaction, UI switching and bounded ARM packaging. They do not
+reproduce the physical iOS decision or verify media output on this TV.
+
 ## 2.2.30: iPhone sends only OPTIONS, then closes
 
 The October 21 follow-up in [issue #22](https://github.com/MrHumanRebel/airtizen/issues/22)

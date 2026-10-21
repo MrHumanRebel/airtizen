@@ -76,7 +76,7 @@ static void handle_client(int fd) {
     char req[4096], method[16], path[256], version[16], expected_host[64];
     char *end, *line, *next;
     size_t used = 0;
-    int control = 0, control_seen=0, query_auth=0, host = 0, origin = 0, length_seen = 0;
+    int control = 0, control_seen=0, query_auth=0, host = 0, origin = 0, length_seen = 0, discovery_profile;
     int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0,report_ended=0;
     int photo=0,photo_report=0,photo_failed=0;unsigned photo_generation=0;
     int artwork=0;unsigned artwork_version=0;
@@ -158,7 +158,8 @@ static void handle_client(int fd) {
     if (!host) { respond(fd, "400 Bad Request", "{\"ok\":false,\"error\":\"missing_host\"}"); return; }
     if(!strcmp(method,"OPTIONS")){respond(fd,"204 No Content","");return;}
     if(g_token[0] && !control && !query_auth){respond(fd,"403 Forbidden","{\"ok\":false,\"error\":\"unauthorized\"}");return;}
-    if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
+    discovery_profile = !strcmp(path, "/discovery/native") || !strcmp(path, "/discovery/uxplay-test");
+    if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && !discovery_profile && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
         respond(fd, "404 Not Found", "{\"ok\":false,\"error\":\"not_found\"}"); return;
     }
     if(!strcmp(method,"GET") && photo){
@@ -193,6 +194,12 @@ static void handle_client(int fd) {
     }
     if (!strcmp(method, "GET") && !strcmp(path, "/status")) {
         respond(fd, "200 OK", airtizen_runtime_status_json()); return;
+    }
+    if (!strcmp(method, "POST") && discovery_profile) {
+        int rc;
+        if (!control) { respond(fd, "403 Forbidden", "{\"ok\":false,\"error\":\"control_header_required\"}"); return; }
+        rc = airtizen_runtime_set_discovery_profile(path + 11);
+        respond(fd, rc == 0 ? "200 OK" : "503 Service Unavailable", airtizen_runtime_status_json()); return;
     }
     if (!strcmp(method, "POST") && (!strcmp(path, "/start") || !strcmp(path, "/stop"))) {
         int rc = 0;

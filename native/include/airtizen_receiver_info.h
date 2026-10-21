@@ -53,9 +53,9 @@ static plist_t airtizen_receiver_info(raop_conn_t *conn, http_request_t *request
     plist_dict_set_item(info, "name", plist_new_string(receiver));
     plist_dict_set_item(info, "deviceID", plist_new_string(device_id));
     plist_dict_set_item(info, "macAddress", plist_new_string(device_id));
-    plist_dict_set_item(info, "model", plist_new_string("AirTizen1,1"));
-    plist_dict_set_item(info, "sourceVersion", plist_new_string("220.68"));
-    plist_dict_set_item(info, "features", plist_new_uint(AIRTIZEN_FEATURES));
+    plist_dict_set_item(info, "model", plist_new_string(airtizen_discovery_model()));
+    plist_dict_set_item(info, "sourceVersion", plist_new_string(AIRTIZEN_SOURCE_VERSION));
+    plist_dict_set_item(info, "features", plist_new_uint(airtizen_discovery_features()));
     plist_dict_set_item(info, "statusFlags", plist_new_uint(4));
     plist_dict_set_item(info, "vv", plist_new_uint(2));
     plist_dict_set_item(info, "pi", plist_new_string(uuid));
@@ -94,7 +94,7 @@ static plist_t airtizen_receiver_info(raop_conn_t *conn, http_request_t *request
         plist_dict_set_item(display, "heightPhysical", plist_new_uint(0));
         plist_dict_set_item(display, "refreshRate", plist_new_real(1.0 / 60.0));
         plist_dict_set_item(display, "maxFPS", plist_new_uint(30));
-        plist_dict_set_item(display, "rotation", plist_new_bool(1));
+        plist_dict_set_item(display, "rotation", plist_new_bool((airtizen_discovery_features() & (1ULL << 8)) != 0));
         plist_dict_set_item(display, "overscanned", plist_new_bool(0));
         plist_array_append_item(displays, display);
         plist_dict_set_item(info, "displays", displays);

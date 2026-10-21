@@ -1,13 +1,16 @@
 Experimental single-WGT AirTizen receiver for Samsung UE65MU6100 / Tizen 3.0.
 
-This update adds the legacy RAOP `Apple-Challenge`/`Apple-Response` exchange
-and prevents silently regenerated receiver IDs when browser storage is
-unavailable. Existing IDs are preserved; new IDs can use Tizen's network MAC.
-The latest UE65MU6405/iOS 27.0.1 report verifies discovery and the earlier
-`/info` fixes, but still stops after OPTIONS. Whether that iPhone sends a
-challenge is unknown; the new safe diagnostics distinguish this explicitly.
-The new handler's RSA signatures and subsequent pairing pass host checks;
-physical-device connection and playback with this update need retesting.
+The latest UE65MU6405/iOS 27.0.1 test confirms that the iPhone sends only
+OPTIONS without Apple-Challenge, then disconnects; the working RSA response
+and stable device identity do not resolve it. This update adds missing RAOP
+`ft`/`am`, consistent server-version/method metadata, sanitized probe headers
+and a Developer-mode `Discovery profile` switch. Native is the default;
+`UxPlay test` advertises the requested `0x5A7FFEE6,0x0`/`AppleTV3,2` metadata
+for a controlled comparison. This test mode does not add the advertised
+codecs or protocols. It restarts an active receiver and is reset on full
+app relaunch. See docs/TV_STARTUP_TROUBLESHOOTING.md for the test procedure.
+The physical iPhone disconnect cause and playback with this update remain
+unverified.
 
 The native implementation now includes ALAC/AAC audio, encrypted H.264 mirroring with an MSE browser renderer, music metadata/artwork and HTTP URL audio/video sharing with playback controls. Linux/Chromium tests exercise these paths; real Apple sender and Samsung TV compatibility remain unverified. Mirroring A/V synchronization, JPEG/PNG photo uploads, preloading, cached display and dissolve transitions now run locally in the WGT. AirPlay 2 multiroom, slideshow pull sessions and DRM playback are not supplied.
 

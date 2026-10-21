@@ -20,6 +20,8 @@ def write(name: str, text: str) -> None:
         path.write_text(normalized, encoding="utf-8")
 
 handlers = read("raop_handlers.h").replace('"plist/include/plist.h"', '"plist/plist/plist.h"')
+handlers = handlers.replace('SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER',
+    'SETUP, RECORD, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER')
 handlers = handlers.replace('#include "plist/plist/plist.h"', '#include "plist/plist/plist.h"\n#include "airtizen_audio_parameters.h"')
 handlers = handlers.replace('if (!strcmp(content_type,', 'if (content_type && !strcmp(content_type,')
 # Enforce short-circuit on the image/png branch too.
@@ -70,7 +72,7 @@ raop = raop.replace('if (!method || !cseq) {', """if (conn->reverse) { if (!url)
 raop = raop.replace('!strcmp(url, "/info")', 'airtizen_info_path(url)')
 raop = raop.replace('http_response_add_header(*response, "CSeq", cseq);', 'if (cseq) http_response_add_header(*response, "CSeq", cseq);')
 raop = raop.replace('http_response_add_header(*response, "Server", "AirTunes/845.5.1");',
-    'http_response_add_header(*response, "Server", "AirTunes/845.5.1");\n    if (airtizen_raop_challenge(conn, request, response)) return;')
+    'http_response_add_header(*response, "Server", "AirTunes/" AIRTIZEN_SOURCE_VERSION);\n    if (airtizen_raop_challenge(conn, request, response)) return;')
 raop = raop.replace('*response = http_response_init("RTSP/1.0", 200, "OK");', """int validation = airtizen_validate_request(conn, request);
     if (validation) {
         *response = http_response_init(http_request_get_protocol(request), validation,
