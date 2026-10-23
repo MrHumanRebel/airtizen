@@ -189,6 +189,14 @@ if(BUILD_TESTING AND NOT AIRTIZEN_BUILD_TIZEN_SERVICE AND NOT AIRTIZEN_BUILD_NAC
   target_link_libraries(airtizen_video_test PRIVATE airtizen_runtime_lib PkgConfig::AIRTIZEN_AVCODEC)
   target_compile_options(airtizen_video_test PRIVATE -UNDEBUG)
   target_compile_definitions(airtizen_video_test PRIVATE AIRTIZEN_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures")
+  # Exercise the real receive loop over loopback TCP with an identity crypto seam.
+  # The encrypted_mirror_transport test separately validates the real AES fixture.
+  add_executable(airtizen_mirror_reconnect_test ../tests/test_mirror_reconnect.c
+    src/airtizen_h264.c "${AIRPLAY_DIR}/byteutils.c")
+  target_link_libraries(airtizen_mirror_reconnect_test PRIVATE Threads::Threads)
+  target_compile_options(airtizen_mirror_reconnect_test PRIVATE -UNDEBUG)
+  add_test(NAME mirror_reconnect_and_clock_reset COMMAND airtizen_mirror_reconnect_test)
+  set_tests_properties(mirror_reconnect_and_clock_reset PROPERTIES TIMEOUT 10)
   add_executable(airtizen_mirror_test ../tests/test_mirror_transport.c)
   target_link_libraries(airtizen_mirror_test PRIVATE airtizen_core)
   target_compile_options(airtizen_mirror_test PRIVATE -UNDEBUG)

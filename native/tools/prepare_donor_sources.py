@@ -54,6 +54,10 @@ handlers = handlers.replace('raop_rtp_start_audio(conn->raop_rtp, use_udp, remot
                 plist_free(root_node); http_response_set_disconnect(response, 1); return;
             }
             raop_rtp_start_audio(conn->raop_rtp, 1, remote_cport, remote_tport, &cport, &tport, &dport);""")
+# A replacement stream ID must not reset AES while the old receive worker is
+# still decrypting. Stop/join first; start_mirror then returns fresh live ports.
+handlers = handlers.replace('raop_rtp_init_mirror_aes(conn->raop_rtp_mirror, streamConnectionID);',
+    'raop_rtp_mirror_stop(conn->raop_rtp_mirror);\n            raop_rtp_init_mirror_aes(conn->raop_rtp_mirror, streamConnectionID);')
 write("raop_handlers.generated.h", handlers)
 
 raop = read("raop.c").replace('"raop_handlers.h"', '"raop_handlers.generated.h"')
