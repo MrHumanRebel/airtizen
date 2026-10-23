@@ -179,6 +179,7 @@ size_t airtizen_video_copy(int init,uint64_t seq,uint8_t **data,unsigned *genera
  * The manifest and each read are copied under the same video mutex. */
 size_t airtizen_video_hls_manifest(const char *token,char **out) {
     char text[8192];size_t used=0;uint64_t group,first_group,last_group,first,last,i;
+    const char *auth=token && token[0]?"?token=":"";
     double duration,max_duration=1;int valid;unsigned target;
     *out=NULL;pthread_mutex_lock(&lock);
     if(!init_size || !sequence)goto done;
@@ -197,11 +198,11 @@ size_t airtizen_video_hls_manifest(const char *token,char **out) {
         if(duration>max_duration)max_duration=duration;
     }
     target=(unsigned)max_duration;if((double)target<max_duration)++target;
-    used=(size_t)snprintf(text,sizeof(text),"#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%u\n#EXT-X-MEDIA-SEQUENCE:%llu\n#EXT-X-MAP:URI=\"/video/init?token=%s\"\n",target,(unsigned long long)first_group,token);
+    used=(size_t)snprintf(text,sizeof(text),"#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%u\n#EXT-X-MEDIA-SEQUENCE:%llu\n#EXT-X-MAP:URI=\"/video/hls/%u/init%s%s\"\n",target,(unsigned long long)first_group,state.generation,auth,auth[0]?token:"");
     for(group=first_group;group<=last_group;++group) {
         first=group*HLS_GROUP+1;last=first+HLS_GROUP-1;
         duration=(parts[last%PART_COUNT].pts+33333-parts[first%PART_COUNT].pts)/1000000.0;
-        used+=(size_t)snprintf(text+used,sizeof(text)-used,"#EXTINF:%.6f,\n/video/hls/%u/%llu/%llu?token=%s\n",duration,state.generation,(unsigned long long)first,(unsigned long long)last,token);
+        used+=(size_t)snprintf(text+used,sizeof(text)-used,"#EXTINF:%.6f,\n/video/hls/%u/%llu/%llu%s%s\n",duration,state.generation,(unsigned long long)first,(unsigned long long)last,auth,auth[0]?token:"");
     }
     if(used<sizeof(text)){*out=malloc(used+1);if(*out)memcpy(*out,text,used+1);else used=0;}else used=0;
  done:

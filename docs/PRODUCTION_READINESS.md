@@ -11,6 +11,10 @@ Status: **experimental; production sign-off blocked**. Target confirmed by the p
 
 The receiver is now compiled into an ARM NaCl module inside the signed WGT. See [the implemented single-WGT route](SINGLE_WGT_RUNTIME.md). The official Pepper 47 toolchain builds the complete receiver and codecs; its sandbox validator accepts the binary. No separately installed native TPK or LAN companion is required by this architecture. The user’s UE65MU6100 photos confirm installation, NaCl module loading and loopback status, but show receiver socket startup failure. The static-link fix and remaining physical retest are documented in [startup troubleshooting](TV_STARTUP_TROUBLESHOOTING.md). Synchronized media remains unverified.
 
+## Reported physical progress
+
+[PR #27](https://github.com/MrHumanRebel/airtizen/pull/27) reports direct PPAPI/GLES2 macOS mirroring and separately verified audio on Samsung QE49Q7CAM/Q7C, Tizen 3.0. The selected `uxplay-test` profile completed negotiation. Its 178.327 ms sample is TV-side presentation time, not end-to-end latency. Synchronized A/V and other models remain outstanding. See [preserved evidence and regression coverage](DIRECT_VIDEO_VALIDATION.md). This supersedes the earlier startup-only evidence for that model, without marking the full acceptance matrix complete.
+
 ## Verified locally
 
 | Check | Evidence / limit |
@@ -28,7 +32,7 @@ The receiver is now compiled into an ARM NaCl module inside the signed WGT. See 
 | Audio boundary | Volume/mute, nonfinite gain rejection, partial writes and errors tested; Linux explicitly reports a silent host stub |
 | Protocol | Real-process tests cover fragmented requests, exact routes, Host/Origin/custom-header rules, size limits, parallel status, malformed RAOP, reverse events, mDNS and repeated stop/start |
 | UI | Chromium tests cover remote arrows/OK/Back, start/stop, hidden developer logs, bounds and peer-text injection |
-| Sanitizers | All ten CTest targets pass with ASan leak checking and UBSan halt-on-error; downloaded optimized FFmpeg is not sanitizer-instrumented |
+| Sanitizers | Native CTest targets pass with ASan leak checking and UBSan halt-on-error; downloaded optimized FFmpeg is not sanitizer-instrumented |
 | Packaging | Real Web CLI build/sign with temporary 3072-bit development identities; both XML signatures verified cryptographically; a mutated RSA signature is rejected |
 | Release tooling | Numeric version ordering/distance/overflow, staged versions/source preservation, unsigned packages, incorrect versions and tampered payload rejection tested |
 
@@ -36,8 +40,8 @@ These tests establish host implementation behavior, not audible TV output, Apple
 
 ## Remaining production gates
 
-- **Native TV deployment:** install and execute the complete signed WGT on UE65MU6100; verify NaCl loader, inbound sockets/multicast, PPAPI audio and MSE playback. Developer Mode is required for sideloading; use an authorized Samsung distributor if public SDK signing is rejected. Cross-compilation and sandbox validation do not establish successful execution.
-- **Mirroring audio/video synchronization:** audio currently goes to the native output while video has an independent MSE buffer. Implement sender-clock mapping, coordinated playout, clock-drift correction, packet-loss recovery and discontinuity handling. Test resolution/rotation changes, B-frame assumptions, decoder recovery and memory limits on Tizen. Independent audio/video tests do not prove synchronized screen sharing.
+- **Native TV deployment:** install and execute the complete signed WGT on UE65MU6100; verify NaCl loader, inbound sockets/multicast, PPAPI audio, direct hardware video and HLS fallback. Developer Mode is required for sideloading; use an authorized Samsung distributor if public SDK signing is rejected. Cross-compilation and sandbox validation do not establish successful execution.
+- **Mirroring audio/video synchronization:** audio currently goes to the native output while video uses independent direct/HLS presentation (MSE in host browsers). Implement sender-clock mapping, coordinated playout, clock-drift correction, packet-loss recovery and discontinuity handling. Test resolution/rotation changes, B-frame assumptions, decoder recovery and memory limits on Tizen. Independent audio/video tests do not prove synchronized screen sharing.
 - **Sender interoperability:** test current iPhone/iPad/macOS discovery, FairPlay exchange, negotiated codec parameters, pause/flush/reconnect and URL sharing. Current support is the legacy AirPlay path; AirPlay 2 buffered audio, multiroom, slideshow pull sessions and DRM playback are not implemented. Legacy photo upload/cache is implemented with decoded JPEG/PNG browser tests. Legacy RSA/SDP ANNOUNCE audio is not implemented. URL playback depends on formats supported by the TV browser; HLS/AVPlay behavior is unverified.
 - **Authorization and session ownership:** implement persistent identity/pairing authorization or PIN policy, media-session ownership, idle-client limits and systematic security/fuzz review. The WGT now authenticates its local HTTP control/media channel with an ephemeral 256-bit token passed through embed attributes; host development can opt into that mode. This does not authenticate Apple senders. Existing input bounds and crypto fixes are not a full security audit.
 - **Licensing and native distribution:** complete the legacy donor provenance/license audit and include corresponding source, notices and required relinking material. PlayFair is GPLv3 and downloaded FFmpeg is LGPL; the production module no longer links FDK AAC (host test encoder only). Release artifacts include corresponding sources/build scripts and the WGT includes dependency notices. The combined native binary is not MIT-only.
@@ -45,7 +49,7 @@ These tests establish host implementation behavior, not audible TV output, Apple
 
 ## Physical-device acceptance matrix
 
-Record TV firmware, sender model/OS, network topology and artifact commit/hash with each result. Every physical row below is **not run**; do not infer success from host tests.
+Record TV firmware, sender model/OS, network topology and artifact commit/hash with each result. The Q7C samples above provide partial physical evidence; the complete criteria below remain outstanding. Do not infer success from host tests or independent audio/video samples.
 
 | Scenario | Required outcome | Evidence still needed |
 | --- | --- | --- |

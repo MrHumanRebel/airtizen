@@ -51,12 +51,21 @@ int main(int argc,char **argv) {
     }
     assert(config_size>8 && airtizen_video_configure(config,config_size)==0);
     if(serve) {
+        const char *token=getenv("AIRTIZEN_CONTROL_TOKEN");
+        if(token)assert(airtizen_control_http_set_token(token)==0);
         assert(airtizen_runtime_start("AirTizen TV")==0);
         assert(airtizen_control_http_start(45110)==0);
         signal(SIGTERM,finish);signal(SIGINT,finish);
         for(i=0;!done;++i){
             airtizen_core_state receiver;airtizen_core_snapshot(&receiver);
-            if(receiver.running)(void)airtizen_video_frame(packets[i%count].data,packets[i%count].size,(uint64_t)i*33333);
+            if(receiver.running) {
+                /* Discovery restoration can restart the receiver. Simulate the
+                 * new sender's configuration instead of feeding an orphaned
+                 * stream into a cleared muxer after that restart. */
+                airtizen_video_snapshot(&state);
+                if(!state.mime[0]){assert(airtizen_video_configure(config,config_size)==0);i=0;}
+                (void)airtizen_video_frame(packets[i%count].data,packets[i%count].size,(uint64_t)i*33333);
+            }
             usleep(33333);
         }
         airtizen_control_http_stop();airtizen_runtime_stop();
@@ -68,9 +77,31 @@ int main(int argc,char **argv) {
         size=airtizen_video_copy(1,0,&data,&generation);assert(size>32);assert(fwrite(data,1,size,output)==size);free(data);
         for(i=1;i<=count;++i){size=airtizen_video_copy(0,i,&data,&generation);assert(size>0);assert(fwrite(data,1,size,output)==size);free(data);}
         fclose(output);
+        {
+            char *manifest=NULL;uint8_t *group=NULL;size_t group_size,offset=0;
+            assert(airtizen_video_hls_manifest("",&manifest)>0);
+            assert(strstr(manifest,"#EXT-X-MAP:URI=\"/video/hls/") && strstr(manifest,"/init\""));
+            assert(!strstr(manifest,"token="));free(manifest);
+            assert(airtizen_video_hls_manifest("test-control-token",&manifest)>0);
+            assert(strstr(manifest,"/init?token=test-control-token\""));free(manifest);
+            group_size=airtizen_video_hls_segment(generation,1,15,&group);assert(group_size>0);
+            for(i=1;i<=15;++i){
+                size=airtizen_video_copy(0,i,&data,&generation);
+                assert(size && size<=group_size-offset && !memcmp(group+offset,data,size));offset+=size;free(data);
+            }
+            assert(offset==group_size);free(group);
+            assert(!airtizen_video_hls_segment(generation+1,1,15,&group) && !group);
+            assert(!airtizen_video_hls_segment(generation,2,16,&group) && !group);
+            assert(!airtizen_video_hls_segment(generation,1,UINT64_MAX,&group) && !group);
+        }
         assert(airtizen_video_frame(packets[1].data,packets[1].size,1)<0);
         assert(airtizen_video_copy(0,UINT64_MAX,&data,&generation)==0);
         airtizen_video_reset();airtizen_video_snapshot(&state);assert(!state.available);
+        {
+            char *manifest=NULL;
+            assert(!airtizen_video_hls_manifest("",&manifest) && !manifest);
+            assert(!airtizen_video_hls_segment(generation,1,15,&data) && !data);
+        }
         { uint8_t invalid[]={0,0,0,0,0x65};assert(airtizen_h264_frame(invalid,sizeof(invalid))<0); }
         { uint8_t valid[]={0,0,0,1,0x65};assert(airtizen_h264_frame(valid,sizeof(valid))==0);assert(valid[3]==1); }
         puts("30 H.264 access units muxed to bounded MP4 fragments; stream restart and invalid input checks passed");

@@ -30,6 +30,14 @@ independent verification of the response's RSA block.
 
 ## Downloaded media dependency
 
+The GLES2 presentation in `native/nacl/video_host.h` follows the Chromium
+Pepper 47 `examples/api/video_decode/video_decode.cc` example, copyright
+2014 The Chromium Authors. Its BSD redistribution terms are reproduced in
+`native/nacl/LICENSE.chromium` and included in the WGT as
+`licenses/Chromium-video-decode.txt`. The pinned Samsung SDK contains the
+reference example; the release's NaCl runtime archive includes its library
+sources, public headers and SDK notices.
+
 `scripts/build-media-deps.sh` builds a minimal static FFmpeg 7.1.5 dependency from the official FFmpeg repository, commit `3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587`. The codeload archive SHA-256 is `83220fe0807da10df19714176f02ec3d3812ef0e055f69e940d01b3ad1379cdb`. It enables AAC/ALAC/H.264 decoding, H.264 parsing and MP4 muxing, without GPL/nonfree configuration flags. FFmpeg's applicable LGPL notices and source are in the downloaded source tree (`COPYING.LGPLv2.1`, `LICENSE.md` and individual headers).
 
 Before distributing a statically linked native binary, provide the corresponding dependency source, build configuration, notices and any object/relinking material required by the applicable licenses. This build script is reproducibility evidence, not a completed redistribution compliance assessment. The receiver is now distributed inside the WGT; FDK is used only by host encoder tests, not linked into the NaCl module. The workflow includes GPLv3, FFmpeg and Samsung NaCl notices in the WGT and publishes receiver, FFmpeg and NaCl runtime source archives with build scripts. The combined binary includes GPLv3 PlayFair; the repository MIT license does not cover the entire binary. Donor provenance and a complete redistribution audit remain outstanding.

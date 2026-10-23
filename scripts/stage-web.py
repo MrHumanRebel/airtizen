@@ -38,6 +38,7 @@ def stage(destination,version,receiver=None):
         licenses=destination/'licenses';licenses.mkdir(exist_ok=True)
         shutil.copy2(ROOT/'THIRD_PARTY_NOTICES.md',licenses/'THIRD_PARTY_NOTICES.md')
         shutil.copy2(ROOT/'third_party/AirPlayServerLib/lib/playfair/LICENSE.md',licenses/'COPYING.GPLv3')
+        shutil.copy2(ROOT/'native/nacl/LICENSE.chromium',licenses/'Chromium-video-decode.txt')
         cache=Path(os.environ.get('AIRTIZEN_DEPS_DIR',ROOT.parent/'.airtizen-deps'))
         sdk=Path(os.environ.get('NACL_SDK_ROOT',cache/'nacl-sdk/pepper_47'))
         ffmpeg=cache/'nacl-media-source/FFmpeg-3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587'

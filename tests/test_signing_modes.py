@@ -37,6 +37,10 @@ class Signing(unittest.TestCase):
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     def test_no_secrets_public_package(self):
+        # A complete widget can exceed XMLDSig's document-oriented default of
+        # 30 references. Sign actual additional files, not fabricated XML.
+        for i in range(35):
+            (self.stage/('reference-%02d.txt'%i)).write_text('Signed payload %d\n'%i)
         result = self.build()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertNotIn('Author password:', result.stdout)

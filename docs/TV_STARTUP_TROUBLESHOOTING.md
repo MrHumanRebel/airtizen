@@ -1,5 +1,20 @@
 # Samsung Tizen 3.0 receiver startup failures
 
+## After PR #27: direct hardware video and regression fixes
+
+The contributor's QE49Q7CAM/Q7C test now establishes direct PPAPI/GLES2
+macOS mirroring and separately working audio on Tizen 3.0. The UI retains
+the successfully negotiated `uxplay-test` default and persists explicit
+profile selection when storage is available. The Native launch-default
+and nonpersistent-selection descriptions below document the earlier
+2.2.31/2.2.32 investigation, not current behavior.
+
+The follow-up fix restores photo/URL-sharing updates beside direct video,
+keeps MSE for NaCl-less browsers and hardens HLS cleanup/generation handling.
+See [physical evidence, regression boundaries and the retest procedure](DIRECT_VIDEO_VALIDATION.md).
+UE65MU6100/UE65MU6405 compatibility and simultaneous A/V synchronization
+still require the new WGT's device test.
+
 ## 2.2.31: challenge excluded; compare discovery profiles
 
 The next physical UE65MU6405/Tizen 3.0/iOS 27.0.1 test in

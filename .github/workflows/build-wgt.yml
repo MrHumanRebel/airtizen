@@ -39,11 +39,13 @@ jobs:
           npx --yes acorn@8.15.0 --ecma5 app/js/embedded-receiver.js > /dev/null
           node --check app/js/share.js
           node --check app/js/video.js
+          node --check app/js/video-mse.js
           node --check app/js/platform.js
           node --check app/js/app.js
           node --check app/js/native-bridge.js
           npx --yes acorn@8.15.0 --ecma5 app/js/share.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/video.js > /dev/null
+          npx --yes acorn@8.15.0 --ecma5 app/js/video-mse.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/platform.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/app.js > /dev/null
           npx --yes acorn@8.15.0 --ecma5 app/js/native-bridge.js > /dev/null
@@ -57,6 +59,7 @@ jobs:
           python3 tests/test_mirror_gui.py
           python3 tests/test_share_gui.py
           python3 tests/test_photo_gui.py
+          python3 tests/test_direct_video_gui.py
       - name: Address and undefined behavior sanitizers
         run: |
           set -euo pipefail

@@ -82,6 +82,9 @@ class GUI(unittest.TestCase):
             self.ui.get_by_role('button',name='Settings',exact=True).click()
             self.ui.get_by_role('button',name='Developer mode: Off').click()
             expect(self.ui.locator('#discovery-note')).to_be_visible()
+            expect(self.ui.get_by_role('button',name='Discovery profile: UxPlay test')).to_be_visible()
+            self.ui.get_by_role('button',name='Discovery profile: UxPlay test').click()
+            expect(self.ui.get_by_role('button',name='Discovery profile: Native')).to_be_visible()
             self.ui.get_by_role('button',name='Discovery profile: Native').click()
             expect(self.ui.get_by_role('button',name='Discovery profile: UxPlay test')).to_be_visible()
             with urllib.request.urlopen('http://127.0.0.1:45110/status') as response:state=json.load(response)
@@ -103,6 +106,39 @@ class GUI(unittest.TestCase):
         finally:
             request=urllib.request.Request('http://127.0.0.1:45110/discovery/native',method='POST',headers={'X-AirTizen-Control':'1'})
             urllib.request.urlopen(request,timeout=3).close()
+
+    def test_discovery_preference_survives_reload_and_status_is_coalesced(self):
+        # Give this storage test a real HTTP origin. Proxy only its control
+        # requests to the runtime's permitted null origin; production CORS is
+        # unchanged. The opaque sandbox used elsewhere cannot store settings.
+        origin='http://127.0.0.1:'+str(self.server.server_port)
+        def proxy(route):
+            response=route.fetch(headers=dict(route.request.headers,origin='null'))
+            route.fulfill(response=response,headers=dict(response.headers,**{'access-control-allow-origin':origin}))
+        self.page.route('http://127.0.0.1:45110/**',proxy)
+        self.context.add_init_script("if (!localStorage.getItem('airtizen.discovery-profile')) localStorage.setItem('airtizen.discovery-profile','native');")
+        self.page.goto(origin+'/index.html')
+        expect(self.page.get_by_role('heading',name='Receiver test mode')).to_be_visible()
+        self.page.evaluate('AirTizenVideo.stop()')
+        result=self.page.evaluate("""() => new Promise(resolve => AirTizenBridge.status(resolve))""")
+        self.assertEqual(result['discovery']['profile'],'native')
+        result=self.page.evaluate("""() => new Promise(resolve => AirTizenBridge.discovery('uxplay-test',resolve))""")
+        self.assertTrue(result['ok'])
+        self.assertEqual(self.page.evaluate("localStorage.getItem('airtizen.discovery-profile')"),'uxplay-test')
+        request=urllib.request.Request('http://127.0.0.1:45110/discovery/native',method='POST',headers={'X-AirTizen-Control':'1'})
+        urllib.request.urlopen(request,timeout=3).close()
+        restores=[]
+        self.page.on('request',lambda request: restores.append(request.url) if '/discovery/' in request.url else None)
+        self.page.reload()
+        expect(self.page.get_by_role('heading',name='Receiver test mode')).to_be_visible()
+        self.page.evaluate('AirTizenVideo.stop()')
+        calls=[]
+        self.page.on('request',lambda request: calls.append(request.url) if request.url.endswith('/status') else None)
+        results=self.page.evaluate("""() => Promise.all([1,2,3,4,5].map(() => new Promise(resolve => AirTizenBridge.status(resolve))))""")
+        self.assertEqual(len(calls),1)
+        self.assertTrue(all(result['discovery']['profile']=='uxplay-test' for result in results))
+        self.assertEqual(restores,['http://127.0.0.1:45110/discovery/uxplay-test'])
+        self.assertEqual(self.page.evaluate("localStorage.getItem('airtizen.discovery-profile')"),'uxplay-test')
 
     def test_remote_navigation_and_layout(self):
         self.ui.locator('#receiver-action').focus()

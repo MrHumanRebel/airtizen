@@ -50,7 +50,7 @@ class EmbeddedPackage(unittest.TestCase):
                      for p in destination.rglob('*') if p.is_file()}
             embedded.check_embedded(files.__getitem__)
             self.assertEqual(files['receiver/receiver_arm.nexe'], MODULE.read_bytes())
-            for required in ('receiver/receiver.nmf', 'receiver/receiver_arm.nexe', 'js/embedded-receiver.js'):
+            for required in ('receiver/receiver.nmf', 'receiver/receiver_arm.nexe', 'js/embedded-receiver.js', 'js/video-mse.js', 'js/video.js'):
                 missing = dict(files)
                 del missing[required]
                 with self.assertRaises((KeyError, ValueError)):
@@ -66,6 +66,7 @@ class EmbeddedPackage(unittest.TestCase):
                     embedded.check_module(payload)
             self.assertTrue((destination / 'licenses/NaCl-NOTICE.txt').stat().st_size)
             self.assertTrue((destination / 'licenses/FFmpeg-COPYING.LGPLv2.1').stat().st_size)
+            self.assertTrue((destination / 'licenses/Chromium-video-decode.txt').stat().st_size)
 
 
 if __name__ == '__main__':

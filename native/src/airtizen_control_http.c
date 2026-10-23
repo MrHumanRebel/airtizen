@@ -80,7 +80,7 @@ static void handle_client(int fd) {
     int playback_report=0;unsigned report_generation=0;double report_position=0,report_duration=0;int report_ready=0,report_failed=0,report_ended=0;
     int photo=0,photo_report=0,photo_failed=0;unsigned photo_generation=0;
     int artwork=0;unsigned artwork_version=0;
-    int hls_manifest=0,hls_segment=0;unsigned hls_generation=0;unsigned long long hls_first=0,hls_last=0;
+    int hls_manifest=0,hls_init=0,hls_segment=0;unsigned hls_generation=0;unsigned long long hls_first=0,hls_last=0;
     int media_init=0,media_segment=0;uint64_t media_sequence=0;
     struct timeval timeout = {1, 0};
     g_response_origin = "null";
@@ -122,6 +122,7 @@ static void handle_client(int fd) {
     {int parsed=0;photo_report=sscanf(path,"/photo/report?generation=%u&failed=%d%n",&photo_generation,&photo_failed,&parsed)==2 && !path[parsed] && (photo_failed==0 || photo_failed==1);}
     hls_manifest=!strcmp(path,"/video/live.m3u8");
     {int parsed=0;hls_segment=sscanf(path,"/video/hls/%u/%llu/%llu%n",&hls_generation,&hls_first,&hls_last,&parsed)==3 && !path[parsed];}
+    {int parsed=0;hls_init=sscanf(path,"/video/hls/%u/init%n",&hls_generation,&parsed)==1 && parsed>0 && !path[parsed];}
     media_init=!strcmp(path,"/video/init");
     if(!strncmp(path,"/video/segment/",15)) {
         const char *digit=path+15;char *tail;
@@ -162,7 +163,7 @@ static void handle_client(int fd) {
     if(!strcmp(method,"OPTIONS")){respond(fd,"204 No Content","");return;}
     if(g_token[0] && !control && !query_auth){respond(fd,"403 Forbidden","{\"ok\":false,\"error\":\"unauthorized\"}");return;}
     discovery_profile = !strcmp(path, "/discovery/native") || !strcmp(path, "/discovery/uxplay-test");
-    if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && !hls_manifest && !hls_segment && !discovery_profile && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
+    if (!photo && !photo_report && !artwork && !playback_report && !media_init && !media_segment && !hls_manifest && !hls_init && !hls_segment && !discovery_profile && strcmp(path, "/status") && strcmp(path, "/start") && strcmp(path, "/stop")) {
         respond(fd, "404 Not Found", "{\"ok\":false,\"error\":\"not_found\"}"); return;
     }
     if(!strcmp(method,"GET") && photo){
@@ -200,9 +201,10 @@ static void handle_client(int fd) {
         else respond(fd,"410 Gone","{\"ok\":false}");
         free(body);return;
     }
-    if(!strcmp(method,"GET") && (media_init || media_segment)) {
+    if(!strcmp(method,"GET") && (media_init || media_segment || hls_init)) {
         uint8_t *body=NULL;unsigned generation=0;
-        size_t size=airtizen_video_copy(media_init,media_sequence,&body,&generation);
+        size_t size=airtizen_video_copy(media_init || hls_init,media_sequence,&body,&generation);
+        if(hls_init && generation!=hls_generation)size=0;
         if(size)respond_bytes(fd,"200 OK","video/mp4",body,size,generation);
         else respond(fd,"410 Gone","{\"ok\":false,\"error\":\"media_not_available\"}");
         free(body);return;

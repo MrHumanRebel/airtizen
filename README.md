@@ -2,7 +2,7 @@
 
 An experimental AirPlay receiver for Samsung UE65MU6100 / Tizen 3.0, with a TV remote friendly web UI and a native receiver core.
 
-**Experimental: production acceptance on this TV is still outstanding.** The receiver implements encrypted ALAC/AAC audio, H.264 mirroring transport with a browser MSE renderer, music metadata/artwork, and HTTP URL video/audio sharing with playback controls. These paths have Linux/Chromium regression coverage. Real iPhone interoperability, Tizen 3.0 rendering and synchronized mirroring audio/video have not been established. Legacy JPEG/PNG photo sharing and preloading are implemented. AirPlay 2 multiroom, slideshow pull sessions and DRM playback are unsupported. The WGT bundles the ARM NaCl receiver, codecs and PPAPI audio output; no separately installed native service or PC relay is required by this architecture. Execution on the target TV is not yet verified.
+**Experimental: production acceptance on UE65MU6100 remains outstanding.** The receiver implements encrypted ALAC/AAC audio, H.264 mirroring with direct PPAPI hardware decoding/GLES2 presentation and TV-local HLS fallback, music metadata/artwork, URL video/audio playback controls and JPEG/PNG photo sharing/cache. [PR #27](https://github.com/MrHumanRebel/airtizen/pull/27) reports physical macOS mirroring and separate audio playback on Samsung QE49Q7CAM/Q7C, Tizen 3.0; synchronized A/V and other models are not established. NaCl-less browsers retain the tested MSE renderer. AirPlay 2 multiroom, slideshow pull sessions and DRM playback are unsupported. The WGT bundles the ARM NaCl receiver and codecs; no separate native service or PC relay is required. See [the physical evidence and regression boundaries](docs/DIRECT_VIDEO_VALIDATION.md).
 
 ## Development
 
@@ -19,9 +19,10 @@ python3 tests/test_gui.py
 python3 tests/test_mirror_gui.py
 python3 tests/test_share_gui.py
 python3 tests/test_photo_gui.py
+python3 tests/test_direct_video_gui.py
 ```
 
-The ten CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
+The CTest targets cover encrypted AAC-LC/AAC-ELD and lossless ALAC decoding, encrypted mirror transport, H.264 conversion/MP4 fragmentation, metadata, receiver callbacks and real-process protocol integration. The latter includes an independent X25519/Ed25519/AES pair-verify client, HTTP validation, reverse playback events, mDNS and repeated restarts. Browser tests exercise the actual native HTTP bridge, decoded mirroring frames, URL video with decoded audio, pause/seek/stop and remote navigation. Run these suites sequentially because they use the receiver's fixed ports. None proves compatibility with an Apple sender or Tizen TV.
 
 Media tests require H.264/AAC support. CI explicitly selects branded Chrome: Playwright’s bundled Chromium may lack these codecs. Alternatively set `CHROMIUM_EXECUTABLE` to a codec-enabled system browser; it takes precedence over `CHROMIUM_CHANNEL`. Missing codecs fail a preflight check and do not skip playback assertions.
 
@@ -37,7 +38,7 @@ curl -fsS -X POST -H 'X-AirTizen-Control: 1' http://127.0.0.1:45110/start
 
 Stop the manually launched runtime before integration tests; tests never kill someone else's service. Host audio is a test sink and produces no audible sound. Status reports `host_stub` rather than pretending audio was played. The control API accepts only its loopback Host and, when supplied, the opaque `null` Origin used by packaged web apps. The WGT creates a fresh 256-bit random control token at startup and passes it directly into the native embed. Status/media requests and POST controls require that token; image URLs carry generation-bound access plus the token. Preflight responses disclose no protected data. Host development retains the header-only test mode unless `AIRTIZEN_CONTROL_TOKEN` is set. See [control-channel authentication](docs/CONTROL_CHANNEL.md). Verify the actual WGT Origin on the TV before enabling additional origins.
 
-The UI keeps diagnostics hidden by default. Settings → Developer mode exposes receiver logs and protocol state; Blue opens diagnostics when developer mode is enabled. Arrows, OK and Back work without a mouse. The developer preference persists when the platform permits local storage.
+The UI keeps diagnostics hidden by default. Settings → Developer mode exposes receiver logs and protocol state; Blue opens diagnostics when developer mode is enabled. Arrows, OK and Back work without a mouse. Developer mode and discovery-profile preferences persist when the platform permits local storage. The UI defaults to the experimental `uxplay-test` profile used successfully in PR #27; selecting Native remains supported. This changes negotiation metadata, not the implemented protocol set.
 
 ## Build and release
 
@@ -53,7 +54,7 @@ The WGT contains `receiver/receiver.nmf` and the ARM `receiver_arm.nexe`. The UI
 
 Sideloading requires Samsung TV Developer Mode. If the public SDK distributor is rejected, re-sign using an authorized Samsung distributor certificate. Consumer mode alone does not provide the sideload installation path. No native TPK or companion PC is required by this package.
 
-The actual NaCl loader, incoming connections, audible output and MSE playback must still be tested on UE65MU6100. Independent audio and video playback do not yet establish synchronized screen sharing. Keep releases experimental until the device acceptance matrix passes.
+The complete receiver, hardware video, audible output and fallback behavior must still be tested on UE65MU6100. Independent audio and video playback do not yet establish synchronized screen sharing. Keep releases experimental until the device acceptance matrix passes.
 
 See [production readiness and research](docs/PRODUCTION_READINESS.md) for evidence, outstanding work and the physical-device acceptance matrix. No signing credentials belong in source or chat.
 

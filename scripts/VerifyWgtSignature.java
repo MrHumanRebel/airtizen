@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.URI;
 import java.security.Key;
 import java.security.MessageDigest;
+import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.util.*;
@@ -16,6 +17,21 @@ import javax.xml.crypto.dsig.keyinfo.*;
 import javax.xml.parsers.*;
 import org.w3c.dom.*;
 public final class VerifyWgtSignature {
+    static final int MAX_REFERENCES=256;
+    static void configureReferenceLimit() {
+        // WGT signing creates one reference per packaged file plus properties.
+        // Keep secure validation and every installed JDK restriction; adjust
+        // only its 30-reference document default for this bounded package use.
+        String property="jdk.xml.dsig.secureValidationPolicy";
+        String policy=Security.getProperty(property);
+        if(policy==null)throw new SecurityException("Missing XML signature security policy");
+        String[] rules=policy.split(",");int found=0;
+        for(int i=0;i<rules.length;i++)if(rules[i].trim().matches("maxReferences\\s+[0-9]+")) {
+            rules[i]="maxReferences "+MAX_REFERENCES;found++;
+        }
+        if(found!=1)throw new SecurityException("Missing/ambiguous XML signature reference policy");
+        Security.setProperty(property,String.join(",",rules));
+    }
     static final class Keys extends KeySelector {
         private final boolean allowSdk;
         Keys(boolean allowSdk){this.allowSdk=allowSdk;}
@@ -43,6 +59,7 @@ public final class VerifyWgtSignature {
     public static void main(String[] args) throws Exception {
         if(args.length<1 || args.length>2 || (args.length==2 && !args[1].equals("--allow-sdk-distributor")))throw new IllegalArgumentException("Expected WGT path and optional --allow-sdk-distributor");
         boolean sdk=args.length==2;
+        configureReferenceLimit();
         DocumentBuilderFactory builder=DocumentBuilderFactory.newInstance();builder.setNamespaceAware(true);
         builder.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING,true);
         builder.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);
@@ -55,6 +72,8 @@ public final class VerifyWgtSignature {
                 if(entry==null || entry.getSize()>1024*1024)throw new SecurityException("Missing/oversized signature");
                 Document document;
                 try(InputStream input=archive.getInputStream(entry)){document=builder.newDocumentBuilder().parse(input);}
+                if(document.getElementsByTagNameNS(XMLSignature.XMLNS,"Reference").getLength()>MAX_REFERENCES)
+                    throw new SecurityException("Too many signature references");
                 Set<String> ids=new HashSet<String>();NodeList elements=document.getElementsByTagNameNS("*","*");
                 for(int i=0;i<elements.getLength();i++) {
                     Element element=(Element)elements.item(i);
