@@ -3,6 +3,17 @@
   var logLines = [];
   var runtimeBase = 'http://127.0.0.1:45110';
   var pollTimeoutMs = 1800;
+  var discoveryPreferenceKey = 'airtizen.discovery-profile';
+
+  function preferredDiscoveryProfile() {
+    var saved;
+    try { saved = global.localStorage.getItem(discoveryPreferenceKey); } catch (ignore) {}
+    /* Local QE49Q7C fork: this profile completed the Mac's pairing and audio. */
+    return saved === 'native' ? 'native' : 'uxplay-test';
+  }
+  function saveDiscoveryProfile(profile) {
+    try { global.localStorage.setItem(discoveryPreferenceKey, profile); } catch (ignore) {}
+  }
 
   function log(msg){
     logLines.push(now() + ' ' + msg);
@@ -80,6 +91,9 @@
 
   function NativeBridge(){
     this.remoteLogs = [];
+    this.discoveryRestoreAttempted = false;
+    this.statusRequestInFlight = false;
+    this.statusWaiters = [];
     this.runtimeReachable = false;
     this.lastStatus = copyStatus({
       mdns: 'checking',
@@ -139,18 +153,42 @@
   NativeBridge.prototype.discovery = function(profile, cb){
     var self = this;
     if (profile !== 'native' && profile !== 'uxplay-test') { if (cb) cb({ok:false,error:'invalid discovery profile'}); return; }
+    /* An explicit selection takes precedence over automatic startup restore. */
+    self.discoveryRestoreAttempted = true;
     log('discovery profile requested: ' + profile);
     xhrJson('POST', '/discovery/' + profile, null, function(res){
-      if (cb) cb(self.applyRuntimeResult(res, 'discovery'));
+      var result = self.applyRuntimeResult(res, 'discovery');
+      if (result.ok) saveDiscoveryProfile(profile);
+      if (cb) cb(result);
     });
   };
 
   NativeBridge.prototype.status = function(cb){
     var self = this;
-    xhrJson('GET', '/status', null, function(res){
-      var result = self.applyRuntimeResult(res, 'status');
+    if (cb) self.statusWaiters.push(cb);
+    if (self.statusRequestInFlight) return;
+    self.statusRequestInFlight = true;
+    function finish(result) {
+      var callbacks = self.statusWaiters, i;
+      self.statusWaiters = []; self.statusRequestInFlight = false;
       result.log = (self.remoteLogs || []).concat(logLines).join('\n');
-      if (cb) cb(result);
+      for (i = 0; i < callbacks.length; i++) callbacks[i](result);
+    }
+    xhrJson('GET', '/status', null, function(res){
+      var result = self.applyRuntimeResult(res, 'status'), preferred;
+      if (result.ok && !self.discoveryRestoreAttempted) {
+        /* Mark before POST: a failed restore must not restart on every poll. */
+        self.discoveryRestoreAttempted = true;
+        preferred = preferredDiscoveryProfile();
+        if (result.discovery.profile !== preferred) {
+          log('restoring discovery profile: ' + preferred);
+          xhrJson('POST', '/discovery/' + preferred, null, function(restored){
+            finish(self.applyRuntimeResult(restored, 'discovery restore'));
+          });
+          return;
+        }
+      }
+      finish(result);
     });
   };
 
