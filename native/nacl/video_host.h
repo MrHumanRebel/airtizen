@@ -22,21 +22,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <new>
-#include <algorithm>
 class VideoHost {
- struct Timing {double received,feed,picture,paint,swap;};
  struct Packet {std::vector<uint8_t> bytes;double received;};
  public:
- explicit VideoHost(pp::Instance *instance):instance_(instance),dispatch_(this),callbacks_(this),enabled_(false),closing_(false),posted_(false),configure_(false),reset_(false),failed_(false),ready_(false),decoding_(false),painting_(false),pending_(false),queued_bytes_(0),gl_(NULL),program_(0),target_(0),buffer_(0),next_id_(0),frames_(0),dropped_(0),last_ms_(0),sum_ms_(0),optimized_(false),drain_(false),aud_(false),flushing_(false),decoding_config_(false),flushes_(0),scale_location_(-1),offset_location_(-1),window_count_(0),window_next_(0),queue_sum_(0),decode_sum_(0),wait_sum_(0),draw_sum_(0),swap_sum_(0) {
-  pthread_mutex_init(&mutex_,NULL);memset(received_,0,sizeof(received_));memset(timing_,0,sizeof(timing_));memset(window_,0,sizeof(window_));
+ explicit VideoHost(pp::Instance *instance):instance_(instance),dispatch_(this),callbacks_(this),enabled_(false),closing_(false),posted_(false),configure_(false),reset_(false),failed_(false),ready_(false),decoding_(false),painting_(false),pending_(false),queued_bytes_(0),gl_(NULL),program_(0),target_(0),buffer_(0),next_id_(0),frames_(0),dropped_(0),last_ms_(0),sum_ms_(0) {
+  pthread_mutex_init(&mutex_,NULL);memset(received_,0,sizeof(received_));
  }
  ~VideoHost(){Shutdown();pthread_mutex_destroy(&mutex_);}
- void Delimit(bool enabled){aud_=enabled;Optimize(optimized_);}
- void Drain(bool enabled){drain_=enabled;flushes_=0;Optimize(optimized_);}
- void Optimize(bool enabled) {
-  optimized_=enabled;frames_=dropped_=0;sum_ms_=last_ms_=0;window_count_=window_next_=0;
-  queue_sum_=decode_sum_=wait_sum_=draw_sum_=swap_sum_=0;Message("configured");
- }
  void Enable(bool enabled) {
   pthread_mutex_lock(&mutex_);enabled_=enabled;reset_=true;configure_=false;failed_=false;queue_.clear();queued_bytes_=0;config_.clear();PostLocked();pthread_mutex_unlock(&mutex_);
  }
@@ -65,16 +57,13 @@ class VideoHost {
  private:
  void PostLocked(){if(!posted_){posted_=true;pp::Module::Get()->core()->CallOnMainThread(0,dispatch_.NewCallback(&VideoHost::Pump));}}
  void Message(const char *state,int code=0) {
-  char text[1024];size_t queued;pthread_mutex_lock(&mutex_);queued=queue_.size();pthread_mutex_unlock(&mutex_);
-  double ordered[128],recent=0;for(unsigned i=0;i<window_count_;++i){ordered[i]=window_[i];recent+=window_[i];}
-  std::sort(ordered,ordered+window_count_);
-  double n=frames_?frames_:1;
-  snprintf(text,sizeof(text),"{\"type\":\"airtizen-native-video\",\"state\":\"%s\",\"code\":%d,\"frames\":%u,\"droppedPictures\":%u,\"queuedFrames\":%u,\"lastMs\":%.3f,\"averageMs\":%.3f,\"optimized\":%s,\"drain\":%s,\"aud\":%s,\"flushes\":%u,\"recentAverageMs\":%.3f,\"p50Ms\":%.3f,\"p95Ms\":%.3f,\"queueMs\":%.3f,\"decodeMs\":%.3f,\"renderWaitMs\":%.3f,\"drawMs\":%.3f,\"swapMs\":%.3f}",state,code,frames_,dropped_,(unsigned)queued,last_ms_,sum_ms_/n,optimized_?"true":"false",drain_?"true":"false",aud_?"true":"false",flushes_,window_count_?recent/window_count_:0,window_count_?ordered[window_count_/2]:0,window_count_?ordered[(window_count_-1)*95/100]:0,queue_sum_/n,decode_sum_/n,wait_sum_/n,draw_sum_/n,swap_sum_/n);
+  char text[512];size_t queued;pthread_mutex_lock(&mutex_);queued=queue_.size();pthread_mutex_unlock(&mutex_);
+  snprintf(text,sizeof(text),"{\"type\":\"airtizen-native-video\",\"state\":\"%s\",\"code\":%d,\"frames\":%u,\"droppedPictures\":%u,\"queuedFrames\":%u,\"lastMs\":%.3f,\"averageMs\":%.3f}",state,code,frames_,dropped_,(unsigned)queued,last_ms_,frames_?sum_ms_/frames_:0);
   instance_->PostMessage(pp::Var(text));
  }
  void Error(int code) {pthread_mutex_lock(&mutex_);failed_=true;queue_.clear();queued_bytes_=0;pthread_mutex_unlock(&mutex_);ready_=false;Message("error",code);}
  void CloseDecoder() {
-  callbacks_.CancelAll();ready_=false;decoding_=false;flushing_=false;painting_=false;pending_=false;
+  callbacks_.CancelAll();ready_=false;decoding_=false;painting_=false;pending_=false;
   decoder_=pp::VideoDecoder();instance_->BindGraphics(pp::Graphics3D());graphics_=pp::Graphics3D();program_=target_=buffer_=0;
  }
  void Pump(int32_t=0) {
@@ -87,7 +76,7 @@ class VideoHost {
   if(reset||!enabled){CloseDecoder();Message("idle");return;}
   if(failed){Error(PP_ERROR_NOMEMORY);return;}
   if(configure){
-   CloseDecoder();frames_=dropped_=0;sum_ms_=last_ms_=0;window_count_=window_next_=0;queue_sum_=decode_sum_=wait_sum_=draw_sum_=swap_sum_=0;
+   CloseDecoder();frames_=dropped_=0;sum_ms_=last_ms_=0;
    gl_=static_cast<const PPB_OpenGLES2*>(pp::Module::Get()->GetBrowserInterface(PPB_OPENGLES2_INTERFACE));
    if(!gl_){Error(PP_ERROR_NOINTERFACE);return;}
    int32_t attributes[]={PP_GRAPHICS3DATTRIB_ALPHA_SIZE,0,PP_GRAPHICS3DATTRIB_DEPTH_SIZE,0,PP_GRAPHICS3DATTRIB_STENCIL_SIZE,0,PP_GRAPHICS3DATTRIB_WIDTH,1920,PP_GRAPHICS3DATTRIB_HEIGHT,1080,PP_GRAPHICS3DATTRIB_NONE};
@@ -99,34 +88,24 @@ class VideoHost {
    decoder_.Initialize(graphics_,PP_VIDEOPROFILE_H264HIGH,PP_HARDWAREACCELERATION_ONLY,0,callbacks_.NewCallback(&VideoHost::Initialized));
    Message("initializing");return;
   }
-  if(!ready_||decoding_||flushing_)return;
-  Packet packet;decoding_config_=false;
+  if(!ready_||decoding_)return;
+  Packet packet;
   pthread_mutex_lock(&mutex_);
-  if(!config_.empty()){decoding_config_=true;packet.bytes.swap(config_);packet.received=pp::Module::Get()->core()->GetTimeTicks();}
+  if(!config_.empty()){packet.bytes.swap(config_);packet.received=pp::Module::Get()->core()->GetTimeTicks();}
   else if(!queue_.empty()){packet=queue_.front();queued_bytes_-=packet.bytes.size();queue_.pop_front();}
   pthread_mutex_unlock(&mutex_);
   if(packet.bytes.empty())return;
-  if(aud_&&!decoding_config_){static const uint8_t delimiter[]={0,0,0,1,9,0xf0};packet.bytes.insert(packet.bytes.end(),delimiter,delimiter+sizeof(delimiter));}
-  decoding_=true;uint32_t id=++next_id_;received_[id%128]=packet.received;Timing &timing=timing_[id%128];memset(&timing,0,sizeof(timing));timing.received=packet.received;timing.feed=pp::Module::Get()->core()->GetTimeTicks();
+  decoding_=true;uint32_t id=++next_id_;received_[id%128]=packet.received;
   decoder_.Decode(id,(uint32_t)packet.bytes.size(),&packet.bytes[0],callbacks_.NewCallback(&VideoHost::Decoded));
  }
  void Initialized(int32_t result) {
   if(result!=PP_OK){Error(result);return;}ready_=true;
   decoder_.GetPicture(callbacks_.NewCallbackWithOutput(&VideoHost::Picture));Pump();
  }
- void Decoded(int32_t result) {
-  decoding_=false;if(result==PP_ERROR_ABORTED)return;if(result!=PP_OK){Error(result);return;}
-  if(drain_&&!decoding_config_){flushing_=true;decoder_.Flush(callbacks_.NewCallback(&VideoHost::Flushed));return;}
-  Pump();
- }
- void Flushed(int32_t result) {
-  flushing_=false;if(result==PP_ERROR_ABORTED)return;if(result!=PP_OK){Error(result);return;}++flushes_;
-  decoder_.GetPicture(callbacks_.NewCallbackWithOutput(&VideoHost::Picture));Pump();
- }
+ void Decoded(int32_t result) {decoding_=false;if(result==PP_ERROR_ABORTED)return;if(result!=PP_OK){Error(result);return;}Pump();}
  void Picture(int32_t result,PP_VideoPicture picture) {
   if(result==PP_ERROR_ABORTED)return;
   if(result!=PP_OK){Error(result);return;}
-  timing_[picture.decode_id%128].picture=pp::Module::Get()->core()->GetTimeTicks();
   if(painting_){if(pending_){decoder_.RecyclePicture(next_picture_);++dropped_;}next_picture_=picture;pending_=true;}
   else Paint(picture);
   if(ready_)decoder_.GetPicture(callbacks_.NewCallbackWithOutput(&VideoHost::Picture));
@@ -146,10 +125,9 @@ class VideoHost {
   GLint p=gl_->GetAttribLocation(c,program_,"p"),t=gl_->GetAttribLocation(c,program_,"t");
   gl_->EnableVertexAttribArray(c,p);gl_->VertexAttribPointer(c,p,2,GL_FLOAT,GL_FALSE,0,NULL);
   gl_->EnableVertexAttribArray(c,t);gl_->VertexAttribPointer(c,t,2,GL_FLOAT,GL_FALSE,0,reinterpret_cast<void*>(8*sizeof(float)));
-  gl_->Uniform1i(c,gl_->GetUniformLocation(c,program_,"tex"),0);scale_location_=gl_->GetUniformLocation(c,program_,"scale");offset_location_=gl_->GetUniformLocation(c,program_,"offset");target_=target;return true;
+  gl_->Uniform1i(c,gl_->GetUniformLocation(c,program_,"tex"),0);target_=target;return true;
  }
  void Paint(const PP_VideoPicture& picture) {
-  timing_[picture.decode_id%128].paint=pp::Module::Get()->core()->GetTimeTicks();
   if(!Program(picture.texture_target)){decoder_.RecyclePicture(picture);return;}
   int width=picture.visible_rect.size.width,height=picture.visible_rect.size.height;
   if(width<=0||height<=0||picture.texture_size.width<=0||picture.texture_size.height<=0){decoder_.RecyclePicture(picture);Error(PP_ERROR_BADARGUMENT);return;}
@@ -157,19 +135,16 @@ class VideoHost {
   float sx=(float)width/picture.texture_size.width,sy=(float)height/picture.texture_size.height;
   float ox=(float)picture.visible_rect.point.x/picture.texture_size.width,oy=(float)picture.visible_rect.point.y/picture.texture_size.height;
   if(picture.texture_target==GL_TEXTURE_RECTANGLE_ARB){sx=width;sy=height;ox=picture.visible_rect.point.x;oy=picture.visible_rect.point.y;}
-  gl_->Uniform2f(c,(optimized_?scale_location_:gl_->GetUniformLocation(c,program_,"scale")),sx,sy);gl_->Uniform2f(c,(optimized_?offset_location_:gl_->GetUniformLocation(c,program_,"offset")),ox,oy);
+  gl_->Uniform2f(c,gl_->GetUniformLocation(c,program_,"scale"),sx,sy);gl_->Uniform2f(c,gl_->GetUniformLocation(c,program_,"offset"),ox,oy);
   gl_->Viewport(c,0,0,1920,1080);gl_->ClearColor(c,0,0,0,1);gl_->Clear(c,GL_COLOR_BUFFER_BIT);
   int w=1920,h=1080;if((double)width/height<1920.0/1080)w=(int)(1080.0*width/height);else h=(int)(1920.0*height/width);
   gl_->Viewport(c,(1920-w)/2,(1080-h)/2,w,h);gl_->ActiveTexture(c,GL_TEXTURE0);gl_->BindTexture(c,picture.texture_target,picture.texture_id);gl_->DrawArrays(c,GL_TRIANGLE_STRIP,0,4);
-  if((!optimized_ || frames_%120==0) && gl_->GetError(c)!=GL_NO_ERROR){decoder_.RecyclePicture(picture);Error(PP_ERROR_FAILED);return;}
-  timing_[picture.decode_id%128].swap=pp::Module::Get()->core()->GetTimeTicks();
+  if(gl_->GetError(c)!=GL_NO_ERROR){decoder_.RecyclePicture(picture);Error(PP_ERROR_FAILED);return;}
   painting_=true;current_picture_=picture;graphics_.SwapBuffers(callbacks_.NewCallback(&VideoHost::Painted));
  }
  void Painted(int32_t result) {
   painting_=false;if(result==PP_ERROR_ABORTED)return;if(result!=PP_OK){Error(result);return;}
-  double finished=pp::Module::Get()->core()->GetTimeTicks();Timing &t=timing_[current_picture_.decode_id%128];
-  queue_sum_+=1000*(t.feed-t.received);decode_sum_+=1000*(t.picture-t.feed);wait_sum_+=1000*(t.paint-t.picture);draw_sum_+=1000*(t.swap-t.paint);swap_sum_+=1000*(finished-t.swap);
-  last_ms_=1000*(pp::Module::Get()->core()->GetTimeTicks()-received_[current_picture_.decode_id%128]);sum_ms_+=last_ms_;++frames_;window_[window_next_]=last_ms_;window_next_=(window_next_+1)%128;if(window_count_<128)++window_count_;
+  last_ms_=1000*(pp::Module::Get()->core()->GetTimeTicks()-received_[current_picture_.decode_id%128]);sum_ms_+=last_ms_;++frames_;
   decoder_.RecyclePicture(current_picture_);if(frames_==1||frames_%30==0)Message("playing");
   if(pending_){PP_VideoPicture next=next_picture_;pending_=false;Paint(next);}
  }
@@ -177,7 +152,6 @@ class VideoHost {
  pthread_mutex_t mutex_;bool enabled_,closing_,posted_,configure_,reset_,failed_,ready_,decoding_,painting_,pending_;size_t queued_bytes_;
  std::deque<Packet> queue_;std::vector<uint8_t> config_;pp::Graphics3D graphics_;pp::VideoDecoder decoder_;
  const PPB_OpenGLES2 *gl_;GLuint program_,target_,buffer_;uint32_t next_id_,frames_,dropped_;double received_[128],last_ms_,sum_ms_;
- bool optimized_,drain_,aud_,flushing_,decoding_config_;unsigned flushes_;GLint scale_location_,offset_location_;unsigned window_count_,window_next_;double window_[128],queue_sum_,decode_sum_,wait_sum_,draw_sum_,swap_sum_;Timing timing_[128];
  PP_VideoPicture current_picture_,next_picture_;
 };
 #endif

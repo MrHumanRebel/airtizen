@@ -97,12 +97,6 @@ class ReceiverInstance:public pp::Instance {
   }
   virtual void HandleMessage(const pp::Var& message) {
     if(!message.is_string())return;
-    if(message.AsString()=="airtizen-video-aud-on"){video_.Delimit(true);return;}
-    if(message.AsString()=="airtizen-video-aud-off"){video_.Delimit(false);return;}
-    if(message.AsString()=="airtizen-video-drain-on"){video_.Drain(true);return;}
-    if(message.AsString()=="airtizen-video-drain-off"){video_.Drain(false);return;}
-    if(message.AsString()=="airtizen-video-optimize-on"){video_.Optimize(true);return;}
-    if(message.AsString()=="airtizen-video-optimize-off"){video_.Optimize(false);return;}
     if(message.AsString()=="airtizen-video-on"){video_.Enable(true);return;}
     if(message.AsString()=="airtizen-video-off"){video_.Enable(false);return;}
     if(message.AsString()!="airtizen-probe-video")return;
