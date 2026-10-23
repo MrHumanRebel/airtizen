@@ -24,7 +24,7 @@ The WGT now contains the UI, a generated ARM `.nmf`, and the actual native `.nex
 
 The module initializes `nacl_io`, starts the receiver/control server from a worker thread, and uses PPAPI Audio with a bounded PCM queue. TV `systeminfo` supplies the LAN address; a stable local receiver identifier replaces Linux interface/MAC ioctls. The TV manifest uses `tv-samsung` and the documented public-network privilege. HTTP readiness waits and UDP timing-thread shutdown avoid reliance on socket timeouts missing from this SDK.
 
-FFmpeg supplies AAC-LC/AAC-ELD and ALAC decoding; FDK is used only as an independent host-test encoder and is not linked into the production module. The existing encrypted H.264-to-fMP4 path feeds the browser MSE renderer. Native PCM and MSE video are not yet driven by one playout clock.
+FFmpeg supplies AAC-LC/AAC-ELD and ALAC decoding; FDK is used only as an independent host-test encoder and is not linked into the production module. Encrypted H.264 feeds a hardware-only PPAPI decoder and GLES2 presentation on the TV, with authenticated TV-local HLS fallback. The existing fMP4/MSE renderer remains available to NaCl-less browsers. Native PCM and video are not yet driven by one coordinated playout clock. [PR #27 evidence and regression boundaries](DIRECT_VIDEO_VALIDATION.md) records physical Q7C video and separate audio results; those results do not establish synchronized A/V or UE65MU6100 compatibility.
 
 ```bash
 # Linux x86-64: build-essential, CMake 3.19–3.x, pkg-config, curl, unzip, xz-utils, Python 3

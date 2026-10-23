@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import copy
+import xml.etree.ElementTree as ET
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,24 @@ def main(package, jdk, allow_sdk_distributor=False):
                 result = subprocess.run(command+[str(changed)]+options, stdout=log, stderr=log)
                 if result.returncode == 0:
                     raise AssertionError('Modified RSA signature accepted: '+target)
-    print('Actual WGT signatures passed; changed author/distributor signatures rejected')
+            excessive = directory/'excessive-references.wgt'
+            with ZipFile(package) as original, ZipFile(excessive, 'w', ZIP_DEFLATED) as output:
+                for item in original.infolist():
+                    data=original.read(item.filename)
+                    if item.filename=='author-signature.xml':
+                        namespace='{http://www.w3.org/2000/09/xmldsig#}'
+                        document=ET.fromstring(data)
+                        signed=document.find(namespace+'SignedInfo')
+                        reference=signed.find(namespace+'Reference')
+                        while len(document.findall('.//'+namespace+'Reference'))<=256:
+                            signed.append(copy.deepcopy(reference))
+                        data=ET.tostring(document)
+                    output.writestr(item,data)
+            result=subprocess.run(command+[str(excessive)]+options,stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT,text=True)
+            if result.returncode==0 or 'Too many signature references' not in result.stdout:
+                raise AssertionError('Signature reference count limit was not enforced: '+result.stdout)
+    print('Actual WGT signatures passed; changed author/distributor signatures and excessive references rejected')
 
 
 if __name__ == '__main__':

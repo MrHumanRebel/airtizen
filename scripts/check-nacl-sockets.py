@@ -23,6 +23,8 @@ def check(module, sdk):
                 'airtizen_aac_create', 'airtizen_alac_create',
                 'airtizen_apple_response',
                 'airtizen_runtime_set_discovery_profile',
+                'airtizen_nacl_video_configure', 'airtizen_nacl_video_frame', 'airtizen_nacl_video_reset',
+                'airtizen_video_hls_manifest', 'airtizen_video_hls_segment',
                 'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
                 'airtizen_nacl_udp_multicast_v1'}
     missing_runtime = required - all_symbols

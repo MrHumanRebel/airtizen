@@ -64,6 +64,11 @@
     text('runtime-details', 'Embedded receiver: ' + (embedded.phase || 'not loaded') + '\n' + 'Platform: ' + (platform.version || 'unknown') + '   WebAssembly: ' + !!platform.webAssembly + '   MediaSource: ' + !!platform.mediaSource + '\n' + (platform.userAgent || '') + '\n' + 'mDNS: ' + s.mdns + '   RAOP: ' + s.raop + '   Pairing: ' + s.pair + '\nAudio: ' + s.audio + '   Rate: ' + s.rate + '\nLast error: ' + (s.lastError || 'none'));
     if (developer) {
       if (res.discovery) $('runtime-details').textContent += '\nDiscovery: ' + res.discovery.profile + '   Model: ' + res.discovery.model + '\nAdvertised: ' + res.discovery.features + '   Implemented: ' + res.discovery.implementedFeatures;
+      if (window.AirTizenVideo && window.AirTizenVideo.debugSnapshot) {
+        var presentation = window.AirTizenVideo.debugSnapshot(), metrics = presentation.metrics || {};
+        $('runtime-details').textContent += '\nVideo: ' + presentation.mode + '   State: ' + (metrics.state || 'idle') + (metrics.code != null ? '   Code: ' + metrics.code : '');
+        if (metrics.frames != null) $('runtime-details').textContent += '\nPresented: ' + metrics.frames + '   Queued: ' + metrics.queuedFrames + '   Dropped pictures: ' + metrics.droppedPictures + '\nTV presentation average: ' + metrics.averageMs + ' ms   Last: ' + metrics.lastMs + ' ms (excludes sender/network/panel)';
+      }
       text('full-log', res.log || 'No recent log entries.');
       $('full-log').scrollTop = $('full-log').scrollHeight;
     }

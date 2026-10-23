@@ -9,6 +9,8 @@ REQUIRED_SYMBOLS = frozenset({
     'airtizen_aac_create', 'airtizen_alac_create',
     'airtizen_apple_response',
     'airtizen_runtime_set_discovery_profile',
+    'airtizen_nacl_video_configure', 'airtizen_nacl_video_frame', 'airtizen_nacl_video_reset',
+    'airtizen_video_hls_manifest', 'airtizen_video_hls_segment',
     'ff_aac_decoder', 'ff_alac_decoder', 'ff_h264_decoder',
     'airtizen_nacl_udp_multicast_v1',
 })
@@ -86,7 +88,6 @@ def check_embedded(read):
         data = read('receiver/' + url)
         if architecture == 'arm':
             check_module(data)
-    if b'embedded-receiver.js' not in read('index.html'):
-        raise ValueError('UI does not launch the bundled receiver')
-    if not read('js/embedded-receiver.js'):
-        raise ValueError('Missing receiver bootstrap')
+    for script in ('embedded-receiver.js', 'video-mse.js', 'video.js'):
+        if script.encode() not in read('index.html') or not read('js/' + script):
+            raise ValueError('Missing receiver bootstrap or video controller: ' + script)

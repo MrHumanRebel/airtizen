@@ -1,19 +1,30 @@
-Experimental single-WGT AirTizen receiver for Samsung UE65MU6100 / Tizen 3.0.
+Experimental single-WGT AirTizen receiver for Samsung Tizen 3.0.
 
-The latest UE65MU6405/iOS 27.0.1 test confirms that the iPhone sends only
-OPTIONS without Apple-Challenge, then disconnects; the working RSA response
-and stable device identity do not resolve it. This update adds missing RAOP
-`ft`/`am`, consistent server-version/method metadata, sanitized probe headers
-and a Developer-mode `Discovery profile` switch. Native is the default;
-`UxPlay test` advertises the requested `0x5A7FFEE6,0x0`/`AppleTV3,2` metadata
-for a controlled comparison. This test mode does not add the advertised
-codecs or protocols. It restarts an active receiver and is reset on full
-app relaunch. See docs/TV_STARTUP_TROUBLESHOOTING.md for the test procedure.
-The physical iPhone disconnect cause and playback with this update remain
-unverified.
+Preserves PR #27's direct PPAPI hardware H.264 decoder, GLES2 rendering,
+TV-local HLS fallback and mirror transport reconnection. That contributor
+verified 1728×1080 macOS mirroring and separate audio on QE49Q7CAM/Q7C.
+The reported 178.327 ms average is a TV-side presentation sample, not
+end-to-end latency or a guarantee. A/V synchronization was not measured.
 
-The native implementation now includes ALAC/AAC audio, encrypted H.264 mirroring with an MSE browser renderer, music metadata/artwork and HTTP URL audio/video sharing with playback controls. Linux/Chromium tests exercise these paths; real Apple sender and Samsung TV compatibility remain unverified. Mirroring A/V synchronization, JPEG/PNG photo uploads, preloading, cached display and dissolve transitions now run locally in the WGT. AirPlay 2 multiroom, slideshow pull sessions and DRM playback are not supplied.
+Fixes the merged GUI test's stale Native-default assumption while retaining
+the working `uxplay-test` default and saved profile selection. Restores
+photo/URL-sharing handling during direct playback and MSE mirroring in
+NaCl-less browsers. HLS stops on stream end, clears stale callbacks and
+uses generation-bound initialization URLs. Host HLS no longer emits empty
+authentication queries. Diagnostics show playback mode/presentation metrics.
+Regression coverage includes real decoded media and authenticated HLS routes;
+the simulated PPAPI message test does not execute a Samsung GPU.
+Complete-package signature verification now supports up to 256 file/property
+references without disabling XMLDSig secure validation or weakening key policy.
 
-This signed WGT contains the web UI and the actual ARM NaCl receiver, including codecs and PPAPI audio output. It does not require a native service TPK or PC relay. The ARM binary passes the Samsung SDK sandbox validator and package/signature checks; actual execution, discovery and media output on UE65MU6100 remain unverified. This is not yet a production-ready full AirPlay implementation. Corresponding source archives and license notices accompany the package.
+The WGT contains the web UI and statically linked ARM NaCl receiver/codecs.
+No native service TPK, codec download or PC relay is required. The TV supplies
+its built-in NaCl/PPAPI/media platform. Corresponding sources and license
+notices accompany the package. Device-wide production acceptance remains
+outstanding; AirPlay 2 multiroom, slideshow pull and DRM are unsupported.
 
-The default package uses the public community author and SDK distributor for sideloading; configured identities are also supported. See SIGNING-MODE.txt. Package signatures are verified, but public SDK signing does not prove authorization on every Samsung firmware. Enable Developer Mode and, if required by the device, re-sign with its authorized Samsung distributor. Keep the existing author identity for upgrades. SHA256SUMS accompanies the artifact.
+The default package uses the public community author and SDK distributor for
+sideloading. See SIGNING-MODE.txt and SHA256SUMS. Developer Mode is required;
+firmware may require re-signing with its authorized Samsung distributor.
+Keep the existing author identity for upgrades. See
+`docs/DIRECT_VIDEO_VALIDATION.md` for evidence and the next device checks.
